@@ -4,7 +4,10 @@ use serde::{Serialize, Deserialize};
 use std::sync::RwLock;
 
 mod file_engine;
+mod mark_engine;
+
 use file_engine::{FileEngine, ChunkManager, EditableFileManager, EditOp, SearchEngine, SearchResult, FileInfo, CHUNK_SIZE};
+use mark_engine::{MarkEngine, MarkColor, Mark, MarkUpdate, MarkExport};
 
 // ============== Request/Response Types ==============
 
@@ -113,6 +116,48 @@ struct EditStatus {
 struct SaveAsRequest {
     source_path: String,
     target_path: String,
+}
+
+// ============== Mark Request/Response Types ==============
+
+#[derive(Debug, Deserialize)]
+struct CreateMarkRequest {
+    path: String,
+    start: usize,
+    end: usize,
+    color: MarkColor,
+    label: Option<String>,
+    note: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct UpdateMarkRequest {
+    path: String,
+    id: String,
+    updates: MarkUpdate,
+}
+
+#[derive(Debug, Deserialize)]
+struct DeleteMarkRequest {
+    path: String,
+    id: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct GetMarksRequest {
+    path: String,
+    start: Option<usize>,
+    end: Option<usize>,
+}
+
+#[derive(Debug, Serialize)]
+struct MarksResponse {
+    marks: Vec<Mark>,
+}
+
+#[derive(Debug, Serialize)]
+struct MarkCountResponse {
+    count: usize,
 }
 
 // ============== Tauri Commands ==============
@@ -397,6 +442,102 @@ async fn get_file_info(path: String) -> Result<FileInfo, String> {
     }
 }
 
+// ============== Mark Commands ==============
+
+#[tauri::command]
+async fn create_mark(req: CreateMarkRequest) -> Result<Mark, String> {
+    let mut marks = MarkEngine::get_or_create(&req.path);
+    
+    let mark = Mark {
+        id: String::new(), // Will be generated
+        start: req.start,
+        end: req.end,
+        color: req.color,
+        label: req.label,
+        note: req.note,
+        created_at: current_timestamp(),
+        updated_at: current_timestamp(),
+    };
+    
+    marks.add_mark(mark).map_err(|e| e)
+}
+
+#[tauri::command]
+async fn update_mark(req: UpdateMarkRequest) -> Result<Mark, String> {
+    let mut marks = MarkEngine::get_or_create(&req.path);
+    marks.update_mark(&req.id, req.updates).map_err(|e| e)
+}
+
+#[tauri::command]
+async fn delete_mark(req: DeleteMarkRequest) -> Result<Mark, String> {
+    let mut marks = MarkEngine::get_or_create(&req.path);
+    marks.delete_mark(&req.id)
+        .ok_or_else(|| "Mark not found".to_string())
+}
+
+#[tauri::command]
+async fn get_marks(req: GetMarksRequest) -> Result<MarksResponse, String> {
+    let marks = MarkEngine::get_or_create(&req.path);
+    
+    let marks_vec: Vec<Mark> = if let (Some(start), Some(end)) = (req.start, req.end) {
+        marks.get_marks_in_range(start, end)
+            .into_iter()
+            .cloned()
+            .collect()
+    } else {
+        marks.get_all_marks()
+            .into_iter()
+            .cloned()
+            .collect()
+    };
+    
+    Ok(MarksResponse { marks: marks_vec })
+}
+
+#[tauri::command]
+async fn get_marks_at(path: String, offset: usize) -> Result<MarksResponse, String> {
+    let marks = MarkEngine::get_or_create(&path);
+    let marks_vec: Vec<Mark> = marks.get_marks_at(offset)
+        .into_iter()
+        .cloned()
+        .collect();
+    
+    Ok(MarksResponse { marks: marks_vec })
+}
+
+#[tauri::command]
+async fn clear_marks(path: String) -> Result<(), String> {
+    let mut marks = MarkEngine::get_or_create(&path);
+    marks.clear_all();
+    Ok(())
+}
+
+#[tauri::command]
+async fn delete_marks_by_color(path: String, color: MarkColor) -> Result<usize, String> {
+    let mut marks = MarkEngine::get_or_create(&path);
+    Ok(marks.delete_by_color(color))
+}
+
+#[tauri::command]
+async fn get_mark_count(path: String) -> Result<MarkCountResponse, String> {
+    let marks = MarkEngine::get_or_create(&path);
+    Ok(MarkCountResponse { count: marks.count() })
+}
+
+#[tauri::command]
+async fn export_marks(path: String) -> Result<MarkExport, String> {
+    let marks = MarkEngine::get_or_create(&path);
+    Ok(marks.export())
+}
+
+/// Helper: get current timestamp
+fn current_timestamp() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
+}
+
 pub fn run() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
@@ -420,7 +561,17 @@ pub fn run() {
             replace_all,
             // Save
             save_file,
-            save_as
+            save_as,
+            // Marks
+            create_mark,
+            update_mark,
+            delete_mark,
+            get_marks,
+            get_marks_at,
+            clear_marks,
+            delete_marks_by_color,
+            get_mark_count,
+            export_marks
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
