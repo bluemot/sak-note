@@ -6,10 +6,13 @@ use std::sync::RwLock;
 mod file_engine;
 mod mark_engine;
 mod sak_format;
+mod modular;
+mod modules;
 
 use file_engine::{FileEngine, ChunkManager, EditableFileManager, EditOp, SearchEngine, SearchResult, FileInfo, CHUNK_SIZE};
 use mark_engine::{MarkEngine, MarkColor, Mark, MarkUpdate, MarkExport};
 use sak_format::{SakFile, SakInfo, convert_to_sak, convert_from_sak};
+use modular::{ModuleRequest, ModuleResponse, process_request};
 
 // ============== Request/Response Types ==============
 
