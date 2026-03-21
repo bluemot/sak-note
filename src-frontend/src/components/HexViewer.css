@@ -1,0 +1,168 @@
+.hex-viewer {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background-color: #1e1e1e;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 13px;
+}
+
+.hex-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 8px 16px;
+  background-color: #2d2d2d;
+  border-bottom: 1px solid #3d3d3d;
+}
+
+.hex-title {
+  font-weight: bold;
+  color: #d4d4d4;
+}
+
+.hex-nav {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.hex-nav button {
+  padding: 4px 12px;
+  background-color: #3d3d3d;
+  color: #d4d4d4;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.hex-nav button:hover:not(:disabled) {
+  background-color: #4d4d4d;
+}
+
+.hex-nav button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.hex-offset {
+  font-family: monospace;
+  color: #969696;
+}
+
+.hex-selected {
+  margin-left: auto;
+  color: #667eea;
+  font-family: monospace;
+}
+
+.hex-header {
+  display: flex;
+  padding: 8px 16px;
+  background-color: #252526;
+  border-bottom: 1px solid #3d3d3d;
+  color: #969696;
+  font-weight: bold;
+}
+
+.hex-offset-header {
+  width: 80px;
+  flex-shrink: 0;
+}
+
+.hex-bytes-header {
+  flex: 1;
+  display: flex;
+  gap: 4px;
+}
+
+.hex-byte-header {
+  width: 24px;
+  text-align: center;
+}
+
+.hex-ascii-header {
+  width: 160px;
+  flex-shrink: 0;
+  padding-left: 16px;
+}
+
+.hex-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 16px;
+}
+
+.hex-row {
+  display: flex;
+  align-items: center;
+  padding: 2px 0;
+}
+
+.hex-row:hover {
+  background-color: #2d2d2d;
+}
+
+.hex-offset-cell {
+  width: 80px;
+  flex-shrink: 0;
+  color: #969696;
+}
+
+.hex-bytes {
+  flex: 1;
+  display: flex;
+  gap: 4px;
+}
+
+.hex-byte {
+  width: 24px;
+  text-align: center;
+  cursor: pointer;
+  color: #d4d4d4;
+}
+
+.hex-byte:hover {
+  background-color: #3d3d3d;
+  border-radius: 2px;
+}
+
+.hex-byte.selected {
+  background-color: #667eea;
+  border-radius: 2px;
+  color: white;
+}
+
+.hex-ascii {
+  width: 160px;
+  flex-shrink: 0;
+  padding-left: 16px;
+  display: flex;
+}
+
+.hex-ascii-char {
+  width: 10px;
+  text-align: center;
+  cursor: pointer;
+  color: #969696;
+}
+
+.hex-ascii-char:hover {
+  background-color: #3d3d3d;
+  border-radius: 2px;
+}
+
+.hex-ascii-char.selected {
+  background-color: #667eea;
+  border-radius: 2px;
+  color: white;
+}
+
+.hex-viewer-loading {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #969696;
+  font-size: 14px;
+}

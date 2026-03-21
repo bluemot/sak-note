@@ -1,0 +1,427 @@
+use tauri::{Manager, State};
+use std::sync::Arc;
+use serde::{Serialize, Deserialize};
+use std::sync::RwLock;
+
+mod file_engine;
+use file_engine::{FileEngine, ChunkManager, EditableFileManager, EditOp, SearchEngine, SearchResult, FileInfo, CHUNK_SIZE};
+
+// ============== Request/Response Types ==============
+
+#[derive(Debug, Serialize)]
+struct OpenFileResponse {
+    path: String,
+    size: u64,
+    chunks: usize,
+    chunk_size: usize,
+    editable: bool,
+    has_changes: bool,
+}
+
+#[derive(Debug, Deserialize)]
+struct GetChunkRequest {
+    path: String,
+    chunk_id: usize,
+}
+
+#[derive(Debug, Serialize)]
+struct ChunkResponse {
+    id: usize,
+    offset: usize,
+    length: usize,
+    text: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct GetTextRequest {
+    path: String,
+    start: usize,
+    end: usize,
+}
+
+#[derive(Debug, Deserialize)]
+struct GetHexRequest {
+    path: String,
+    start: usize,
+    length: usize,
+}
+
+#[derive(Debug, Serialize)]
+struct HexRow {
+    offset: usize,
+    hex: String,
+    ascii: String,
+}
+
+#[derive(Debug, Serialize)]
+struct HexResponse {
+    rows: Vec<HexRow>,
+}
+
+#[derive(Debug, Deserialize)]
+struct InsertRequest {
+    path: String,
+    offset: usize,
+    data: Vec<u8>,
+}
+
+#[derive(Debug, Deserialize)]
+struct DeleteRequest {
+    path: String,
+    offset: usize,
+    length: usize,
+}
+
+#[derive(Debug, Deserialize)]
+struct ReplaceRequest {
+    path: String,
+    offset: usize,
+    length: usize,
+    data: Vec<u8>,
+}
+
+#[derive(Debug, Deserialize)]
+struct SearchRequest {
+    path: String,
+    pattern: String,
+    is_hex: bool,
+    start_offset: Option<usize>,
+}
+
+#[derive(Debug, Serialize)]
+struct SearchResponse {
+    offset: usize,
+    length: usize,
+    preview: String,
+}
+
+#[derive(Debug, Serialize)]
+struct SearchResultResponse {
+    results: Vec<SearchResponse>,
+    total: usize,
+}
+
+#[derive(Debug, Serialize)]
+struct EditStatus {
+    has_changes: bool,
+    can_undo: bool,
+    can_redo: bool,
+    effective_size: u64,
+}
+
+#[derive(Debug, Deserialize)]
+struct SaveAsRequest {
+    source_path: String,
+    target_path: String,
+}
+
+// ============== Tauri Commands ==============
+
+#[tauri::command]
+async fn open_file(path: String) -> Result<OpenFileResponse, String> {
+    // Open as editable by default
+    match FileEngine::open_for_edit(&path) {
+        Ok(manager) => {
+            let guard = manager.read().map_err(|e| format!("Lock error: {}", e))?;
+            Ok(OpenFileResponse {
+                path: path.clone(),
+                size: guard.effective_size(),
+                chunks: ((guard.effective_size() + CHUNK_SIZE as u64 - 1) / CHUNK_SIZE as u64) as usize,
+                chunk_size: CHUNK_SIZE,
+                editable: true,
+                has_changes: guard.has_changes(),
+            })
+        }
+        Err(e) => Err(format!("Failed to open file: {}", e)),
+    }
+}
+
+#[tauri::command]
+async fn get_chunk(req: GetChunkRequest) -> Result<ChunkResponse, String> {
+    if let Some(manager) = FileEngine::get_editable(&req.path) {
+        let guard = manager.read().map_err(|e| format!("Lock error: {}", e))?;
+        let offset = req.chunk_id * CHUNK_SIZE;
+        let length = CHUNK_SIZE.min((guard.effective_size() as usize).saturating_sub(offset));
+        
+        if length == 0 {
+            return Err("Chunk out of bounds".to_string());
+        }
+        
+        let data = guard.get_range(offset, length);
+        let text = String::from_utf8_lossy(&data).to_string();
+        
+        Ok(ChunkResponse {
+            id: req.chunk_id,
+            offset,
+            length,
+            text,
+        })
+    } else {
+        Err("File not open".to_string())
+    }
+}
+
+#[tauri::command]
+async fn get_text(req: GetTextRequest) -> Result<String, String> {
+    if let Some(manager) = FileEngine::get_editable(&req.path) {
+        let guard = manager.read().map_err(|e| format!("Lock error: {}", e))?;
+        let text = guard.get_text(req.start, req.end.saturating_sub(req.start));
+        Ok(text)
+    } else {
+        Err("File not open".to_string())
+    }
+}
+
+#[tauri::command]
+async fn get_hex_view(req: GetHexRequest) -> Result<HexResponse, String> {
+    if let Some(manager) = FileEngine::get_editable(&req.path) {
+        let guard = manager.read().map_err(|e| format!("Lock error: {}", e))?;
+        let data = guard.get_range(req.start, req.length);
+        
+        let rows: Vec<HexRow> = data
+            .chunks(16)
+            .enumerate()
+            .map(|(idx, bytes)| {
+                let offset = req.start + idx * 16;
+                let hex = bytes
+                    .iter()
+                    .map(|b| format!("{:02x}", b))
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                let ascii: String = bytes
+                    .iter()
+                    .map(|b| {
+                        if b.is_ascii_graphic() || *b == b' ' {
+                            *b as char
+                        } else {
+                            '.'
+                        }
+                    })
+                    .collect();
+                HexRow { offset, hex, ascii }
+            })
+            .collect();
+            
+        Ok(HexResponse { rows })
+    } else {
+        Err("File not open".to_string())
+    }
+}
+
+// ============== Edit Commands ==============
+
+#[tauri::command]
+async fn insert_bytes(req: InsertRequest) -> Result<(), String> {
+    if let Some(manager) = FileEngine::get_editable(&req.path) {
+        let mut guard = manager.write().map_err(|e| format!("Lock error: {}", e))?;
+        guard.apply_edit(EditOp::Insert { 
+            offset: req.offset, 
+            data: req.data 
+        });
+        Ok(())
+    } else {
+        Err("File not open in editable mode".to_string())
+    }
+}
+
+#[tauri::command]
+async fn delete_bytes(req: DeleteRequest) -> Result<(), String> {
+    if let Some(manager) = FileEngine::get_editable(&req.path) {
+        let mut guard = manager.write().map_err(|e| format!("Lock error: {}", e))?;
+        guard.apply_edit(EditOp::Delete { 
+            offset: req.offset, 
+            length: req.length 
+        });
+        Ok(())
+    } else {
+        Err("File not open in editable mode".to_string())
+    }
+}
+
+#[tauri::command]
+async fn replace_bytes(req: ReplaceRequest) -> Result<(), String> {
+    if let Some(manager) = FileEngine::get_editable(&req.path) {
+        let mut guard = manager.write().map_err(|e| format!("Lock error: {}", e))?;
+        guard.apply_edit(EditOp::Replace { 
+            offset: req.offset, 
+            length: req.length, 
+            data: req.data 
+        });
+        Ok(())
+    } else {
+        Err("File not open in editable mode".to_string())
+    }
+}
+
+// ============== Undo/Redo Commands ==============
+
+#[tauri::command]
+async fn undo(path: String) -> Result<bool, String> {
+    if let Some(manager) = FileEngine::get_editable(&path) {
+        let mut guard = manager.write().map_err(|e| format!("Lock error: {}", e))?;
+        Ok(guard.undo())
+    } else {
+        Err("File not open in editable mode".to_string())
+    }
+}
+
+#[tauri::command]
+async fn redo(path: String) -> Result<bool, String> {
+    if let Some(manager) = FileEngine::get_editable(&path) {
+        let mut guard = manager.write().map_err(|e| format!("Lock error: {}", e))?;
+        Ok(guard.redo())
+    } else {
+        Err("File not open in editable mode".to_string())
+    }
+}
+
+#[tauri::command]
+async fn get_edit_status(path: String) -> Result<EditStatus, String> {
+    if let Some(manager) = FileEngine::get_editable(&path) {
+        let guard = manager.read().map_err(|e| format!("Lock error: {}", e))?;
+        Ok(EditStatus {
+            has_changes: guard.has_changes(),
+            can_undo: guard.can_undo(),
+            can_redo: guard.can_redo(),
+            effective_size: guard.effective_size(),
+        })
+    } else {
+        Err("File not open in editable mode".to_string())
+    }
+}
+
+// ============== Search Commands ==============
+
+#[tauri::command]
+async fn search(req: SearchRequest) -> Result<SearchResultResponse, String> {
+    if let Some(manager) = FileEngine::get_editable(&req.path) {
+        let guard = manager.read().map_err(|e| format!("Lock error: {}", e))?;
+        
+        let results = if req.is_hex {
+            // Parse hex pattern
+            let pattern: Vec<u8> = req.pattern
+                .split_whitespace()
+                .map(|s| u8::from_str_radix(s, 16).unwrap_or(0))
+                .collect();
+            guard.search(&pattern, req.start_offset.unwrap_or(0))
+        } else {
+            guard.search_text(&req.pattern, req.start_offset.unwrap_or(0))
+        };
+        
+        let search_results: Vec<SearchResponse> = results
+            .iter()
+            .map(|&offset| {
+                let preview_data = guard.get_range(offset.saturating_sub(16), req.pattern.len() + 32);
+                let preview = String::from_utf8_lossy(&preview_data).to_string();
+                SearchResponse {
+                    offset,
+                    length: req.pattern.len(),
+                    preview,
+                }
+            })
+            .collect();
+            
+        Ok(SearchResultResponse {
+            total: search_results.len(),
+            results: search_results,
+        })
+    } else {
+        Err("File not open".to_string())
+    }
+}
+
+#[tauri::command]
+async fn replace_all(path: String, pattern: String, replacement: String, is_hex: bool) -> Result<usize, String> {
+    if let Some(manager) = FileEngine::get_editable(&path) {
+        let mut guard = manager.write().map_err(|e| format!("Lock error: {}", e))?;
+        
+        let pattern_bytes = if is_hex {
+            pattern.split_whitespace()
+                .map(|s| u8::from_str_radix(s, 16).unwrap_or(0))
+                .collect::<Vec<u8>>()
+        } else {
+            pattern.into_bytes()
+        };
+        
+        let replacement_bytes = if is_hex {
+            replacement.split_whitespace()
+                .map(|s| u8::from_str_radix(s, 16).unwrap_or(0))
+                .collect::<Vec<u8>>()
+        } else {
+            replacement.into_bytes()
+        };
+        
+        let count = guard.replace_all(&pattern_bytes, &replacement_bytes);
+        Ok(count)
+    } else {
+        Err("File not open in editable mode".to_string())
+    }
+}
+
+// ============== Save Commands ==============
+
+#[tauri::command]
+async fn save_file(path: String) -> Result<(), String> {
+    if let Some(manager) = FileEngine::get_editable(&path) {
+        let mut guard = manager.write().map_err(|e| format!("Lock error: {}", e))?;
+        guard.save().map_err(|e| format!("Save failed: {}", e))?;
+        Ok(())
+    } else {
+        Err("File not open in editable mode".to_string())
+    }
+}
+
+#[tauri::command]
+async fn save_as(req: SaveAsRequest) -> Result<(), String> {
+    if let Some(manager) = FileEngine::get_editable(&req.source_path) {
+        let guard = manager.read().map_err(|e| format!("Lock error: {}", e))?;
+        guard.save_as(&req.target_path).map_err(|e| format!("Save as failed: {}", e))?;
+        Ok(())
+    } else {
+        Err("File not open".to_string())
+    }
+}
+
+#[tauri::command]
+async fn close_file(path: String) -> Result<(), String> {
+    FileEngine::close_editable(&path);
+    FileEngine::close_file(&path);
+    Ok(())
+}
+
+#[tauri::command]
+async fn get_file_info(path: String) -> Result<FileInfo, String> {
+    match FileEngine::get_file_info(&path) {
+        Some(info) => Ok(info),
+        None => Err("File not found in cache".to_string()),
+    }
+}
+
+pub fn run() {
+    tauri::Builder::default()
+        .invoke_handler(tauri::generate_handler![
+            // File operations
+            open_file,
+            get_chunk,
+            get_text,
+            get_hex_view,
+            close_file,
+            get_file_info,
+            // Edit operations
+            insert_bytes,
+            delete_bytes,
+            replace_bytes,
+            // Undo/redo
+            undo,
+            redo,
+            get_edit_status,
+            // Search
+            search,
+            replace_all,
+            // Save
+            save_file,
+            save_as
+        ])
+        .run(tauri::generate_context!())
+        .expect("error while running tauri application");
+}
