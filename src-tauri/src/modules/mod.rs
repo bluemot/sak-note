@@ -3,6 +3,7 @@
 //! Each module exposes JSON interfaces for LLM and internal use.
 
 pub mod file_module;
+pub mod marks_module;
 
 /// Initialize and register all modules
 pub fn init() {
@@ -10,6 +11,9 @@ pub fn init() {
     
     // Register file module
     file_module::register();
+    
+    // Register marks module
+    marks_module::register();
     
     log::info!("Modules initialized");
 }
@@ -94,6 +98,67 @@ Get hex representation of bytes.
 - Input: `{"path": "...", "offset": 0, "length": 256}`
 - Output: `{"rows": [{"offset": 0, "hex": "48 65 6c 6c 6f", "ascii": "Hello"}]}`
 
+## Marks Module (`marks`)
+
+Color highlighting and annotation system for files.
+
+### Capabilities
+
+#### `marks.create`
+Create a new color mark.
+- Input: `{"path": "...", "start": 0, "end": 10, "color": "red", "label": "Important", "note": "Key section"}`
+- Output: `{"id": "mark_0_1234567890", "start": 0, "end": 10, "color": "red", "label": "Important", "note": "Key section", "created_at": 1234567890, "updated_at": 1234567890}`
+
+#### `marks.update`
+Update an existing mark.
+- Input: `{"path": "...", "id": "mark_0_1234567890", "updates": {"color": "yellow", "label": "Review"}}`
+- Output: Updated mark object
+
+#### `marks.delete`
+Delete a mark by ID.
+- Input: `{"path": "...", "id": "mark_0_1234567890"}`
+- Output: `{"success": true, "deleted_id": "mark_0_1234567890"}`
+
+#### `marks.get`
+Get all marks or marks in range.
+- Input: `{"path": "...", "start": 0, "end": 1000}` (range optional)
+- Output: `{"marks": [...], "count": 5}`
+
+#### `marks.get_at`
+Get marks at specific position.
+- Input: `{"path": "...", "offset": 50}`
+- Output: `{"marks": [...], "count": 2}`
+
+#### `marks.clear`
+Clear all marks.
+- Input: `{"path": "..."}`
+- Output: `{"success": true, "cleared_count": 10}`
+
+#### `marks.delete_by_color`
+Delete marks by color.
+- Input: `{"path": "...", "color": "red"}`
+- Output: `{"deleted_count": 3}`
+
+#### `marks.count`
+Get mark count with breakdown by color.
+- Input: `{"path": "..."}`
+- Output: `{"count": 10, "by_color": {"red": 3, "yellow": 5, "green": 2}}`
+
+#### `marks.export`
+Export marks to JSON.
+- Input: `{"path": "..."}`
+- Output: `{"path": "...", "marks_count": 10, "marks": [...]}`
+
+#### `marks.import`
+Import marks from JSON.
+- Input: `{"path": "...", "data": {"marks": [...]}}`
+- Output: `{"success": true, "imported_count": 10}`
+
+#### `marks.get_colors`
+Get available colors.
+- Input: `{}`
+- Output: `{"colors": [{"name": "red", "hex": "#ff6b6b"}, ...]}`
+
 ## Usage Example
 
 ```json
@@ -109,6 +174,20 @@ Get hex representation of bytes.
   "module": "file",
   "capability": "read_text",
   "params": {"path": "/home/user/document.txt", "offset": 0, "length": 1024}
+}
+
+// Create a mark
+{
+  "module": "marks",
+  "capability": "create",
+  "params": {"path": "...", "start": 0, "end": 10, "color": "yellow", "label": "Important"}
+}
+
+// Get all marks
+{
+  "module": "marks",
+  "capability": "get",
+  "params": {"path": "..."}
 }
 
 // Search for pattern
