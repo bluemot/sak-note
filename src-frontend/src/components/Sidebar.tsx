@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import LlmChat from './LlmChat'
 import './Sidebar.css'
 
 interface SidebarProps {
@@ -71,20 +72,14 @@ function Sidebar({ currentFile }: SidebarProps) {
 
         {activeTab === 'chat' && (
           <div className="chat-panel">
-            <div className="chat-messages">
-              <p className="placeholder">LLM chat will be available here</p>
-            </div>
-            <div className="chat-input-area">
-              <input
-                type="text"
-                placeholder="Ask about the file..."
-                className="chat-input"
-                disabled={!currentFile}
-              />
-              <button className="send-btn" disabled={!currentFile}>
-                Send
-              </button>
-            </div>
+            {currentFile ? (
+              <LlmChat filePath={currentFile.path} />
+            ) : (
+              <div className="no-file-message">
+                <p>🤖</p>
+                <p>Open a file to start chatting</p>
+              </div>
+            )}
           </div>
         )}
 
