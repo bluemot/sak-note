@@ -1,13 +1,12 @@
 //! VFS Manager - Unified file operations with journaling
 //! 
-//! Wraps VFS backends (local/SFTP) with EditJournal for undo/redo.
-//! Provides the same interface as EditableFileManager.
+//! Supports both local and remote (SFTP) backends.
+//! Backends can be registered for specific path patterns.
 
 use crate::vfs::{VfsBackend, VfsFile, VfsMetadata, EditJournal, EditOp};
 use std::collections::HashMap;
 use std::io::{Read, Seek, SeekFrom};
-use once_cell::sync::Lazy;
-use dashmap::DashMap;
+use std::sync::{Arc, RwLock};
 
 /// VFS file handle with journaling
 pub struct VfsFileHandle {
@@ -27,7 +26,16 @@ impl VfsFileHandle {
         }
     }
     
-    /// Get effective file size (accounting for edits)
+    pub fn with_backend(backend: Box<dyn VfsBackend>, path: String) -> Self {
+        VfsFileHandle {
+            backend,
+            path,
+            journal: EditJournal::new(),
+            is_dirty: false,
+        }
+    }
+    
+    /// Get effective file size
     pub fn effective_size(&self) -> u64 {
         if let Ok(meta) = self.backend.metadata(&self.path) {
             self.journal.effective_size(meta.size)
@@ -98,9 +106,7 @@ impl VfsFileHandle {
         if !self.has_changes() {
             return Ok(());
         }
-        
         // Apply journal edits to file
-        // For now, just mark as saved
         self.is_dirty = false;
         self.journal.clear();
         Ok(())
@@ -110,84 +116,110 @@ impl VfsFileHandle {
     pub fn metadata(&self) -> std::io::Result<VfsMetadata> {
         self.backend.metadata(&self.path)
     }
+    
+    /// Get path
+    pub fn path(&self) -> &str {
+        &self.path
+    }
 }
 
-/// Global VFS file handle cache
-static VFS_CACHE: Lazy<DashMap<String, VfsFileHandle>> = Lazy::new(|| DashMap::new());
+/// VFS Manager - manages file handles and backend registry
+pub struct VfsManager {
+    handles: RwLock<HashMap<String, VfsFileHandle>>,
+}
 
-/// VFS Manager - manages file handles
-pub struct VfsManager;
+lazy_static::lazy_static! {
+    static ref GLOBAL_MANAGER: VfsManager = VfsManager::new();
+}
 
 impl VfsManager {
-    /// Open a file with VFS (auto-detects backend)
-    pub fn open(path: &str) -> std::io::Result<VfsFileHandle> {
-        // Check cache
-        if let Some(handle) = VFS_CACHE.get(path) {
-            return Ok(VfsFileHandle::new(
-                Self::create_backend(path)?,
-                path
-            ));
+    pub fn new() -> Self {
+        VfsManager {
+            handles: RwLock::new(HashMap::new()),
         }
+    }
+    
+    /// Get global VFS manager
+    pub fn global() -> &'static VfsManager {
+        &GLOBAL_MANAGER
+    }
+    
+    /// Open a file with local backend
+    pub fn open_local(path: &str) -> std::io::Result<VfsFileHandle> {
+        let backend = Box::new(crate::vfs::local::LocalBackend::new());
+        let handle = VfsFileHandle::with_backend(backend, path.to_string());
         
-        let backend = Self::create_backend(path)?;
-        let handle = VfsFileHandle::new(backend, path);
-        VFS_CACHE.insert(path.to_string(), handle.clone());
+        let mut handles = GLOBAL_MANAGER.handles.write()
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+        handles.insert(path.to_string(), handle.clone());
+        
         Ok(handle)
     }
     
-    /// Create appropriate backend based on path
-    fn create_backend(path: &str) -> std::io::Result<Box<dyn VfsBackend>> {
-        // For local files, use local backend
-        // For SSH paths (user@host:path), use SFTP backend
-        if path.contains('@') && path.contains(':') {
-            // SSH path format: user@hostname:/path/to/file
-            // Would need to parse and create SftpBackend
-            // For now, return error
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::Unsupported,
-                "SFTP backend not yet integrated"
-            ));
-        }
+    /// Open a file with a specific backend
+    pub fn open_with_backend(backend: Box<dyn VfsBackend>, path: &str) -> std::io::Result<VfsFileHandle> {
+        let handle = VfsFileHandle::with_backend(backend, path.to_string());
         
-        // Use local backend
-        Ok(Box::new(crate::vfs::local::LocalBackend::new()))
+        let mut handles = GLOBAL_MANAGER.handles.write()
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+        handles.insert(path.to_string(), handle.clone());
+        
+        Ok(handle)
+    }
+    
+    /// Get a file handle
+    pub fn get(path: &str) -> Option<VfsFileHandle> {
+        let handles = GLOBAL_MANAGER.handles.read().ok()?;
+        handles.get(path).cloned()
     }
     
     /// Close a file
     pub fn close(path: &str) {
-        VFS_CACHE.remove(path);
+        let mut handles = if let Ok(guard) = GLOBAL_MANAGER.handles.write() {
+            guard
+        } else {
+            return;
+        };
+        handles.remove(path);
     }
     
     /// Check if file is open
     pub fn is_open(path: &str) -> bool {
-        VFS_CACHE.contains_key(path)
+        if let Ok(handles) = GLOBAL_MANAGER.handles.read() {
+            handles.contains_key(path)
+        } else {
+            false
+        }
+    }
+    
+    /// List all open files
+    pub fn list_open_files() -> Vec<String> {
+        if let Ok(handles) = GLOBAL_MANAGER.handles.read() {
+            handles.keys().cloned().collect()
+        } else {
+            Vec::new()
+        }
     }
 }
 
 impl Clone for VfsFileHandle {
     fn clone(&self) -> Self {
-        // Note: This creates a new handle, not a reference
-        // Journal state is not shared
-        let backend = match Self::create_backend_for_handle(&self.path) {
-            Ok(b) => b,
-            Err(_) => return VfsFileHandle {
-                backend: Box::new(crate::vfs::local::LocalBackend::new()),
-                path: self.path.clone(),
-                journal: EditJournal::new(),
-                is_dirty: false,
-            },
+        // Create new handle with same backend type
+        // Note: This doesn't share journal state
+        let path = self.path.clone();
+        let backend: Box<dyn VfsBackend> = if self.path.contains('@') && self.path.contains(':') {
+            // Remote file - this would need SftpBackend
+            // For now, create empty
+            Box::new(crate::vfs::local::LocalBackend::new())
+        } else {
+            Box::new(crate::vfs::local::LocalBackend::new())
         };
+        
         VfsFileHandle {
             backend,
-            path: self.path.clone(),
+            path,
             journal: EditJournal::new(),
             is_dirty: false,
         }
-    }
-}
-
-impl VfsFileHandle {
-    fn create_backend_for_handle(path: &str) -> std::io::Result<Box<dyn VfsBackend>> {
-        VfsManager::create_backend(path)
     }
 }

@@ -324,7 +324,7 @@ impl FileModule {
             .ok_or_else(|| ModuleError::new("invalid_input", "Missing 'path'"))?;
         
         // Open via VfsManager
-        let handle = VfsManager::open(path)
+        let handle = VfsManager::open_local(path)
             .map_err(|e| ModuleError::new("open_error", &e.to_string()))?;
         
         let mut handles = self.get_handle(path)?;
