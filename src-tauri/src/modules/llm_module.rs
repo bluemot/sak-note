@@ -1,13 +1,11 @@
-//! LLM Module - Chat with local LLMs via Ollama
+//! LLM Module - Chat with LLMs via Ollama API
+//! 
+//! Supports both local and cloud Ollama endpoints.
 //! 
 //! Exposed capabilities:
 //! - llm.chat: Send a message and get response
-//! - llm.chat_stream: Send message with streaming response
 //! - llm.list_models: List available Ollama models
-//! - llm.load_model: Load a specific model
-//! - llm.unload_model: Unload current model
-//! - llm.get_context: Get current context/messages
-//! - llm.clear_context: Clear conversation history
+//! - llm.get_context/clear_context: Manage conversation history
 //! - llm.set_system_prompt: Set system prompt
 //! - llm.summarize: Summarize text content
 //! - llm.ask_about_file: Ask questions about current file
@@ -18,14 +16,43 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-/// Ollama API endpoint
-const OLLAMA_API_URL: &str = "http://localhost:11434";
+/// Ollama API endpoint - supports cloud (ollama.com) or local
+const DEFAULT_OLLAMA_URL: &str = "https://ollama.com";
 
 /// Chat message
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatMessage {
-    pub role: String,  // "system", "user", "assistant"
+    pub role: String,
     pub content: String,
+}
+
+/// Ollama API response
+#[derive(Debug, Deserialize)]
+struct OllamaResponse {
+    model: String,
+    message: OllamaMessage,
+    done: bool,
+}
+
+#[derive(Debug, Deserialize)]
+struct OllamaMessage {
+    role: String,
+    content: String,
+}
+
+/// Ollama models list response
+#[derive(Debug, Deserialize)]
+struct OllamaModelsResponse {
+    models: Vec<OllamaModel>,
+}
+
+#[derive(Debug, Deserialize)]
+struct OllamaModel {
+    name: String,
+    #[serde(default)]
+    size: Option<i64>,
+    #[serde(default, rename = "modified_at")]
+    modified_at: Option<String>,
 }
 
 /// Conversation context
@@ -38,21 +65,28 @@ pub struct ConversationContext {
 
 /// LLM Module implementation
 pub struct LlmModule {
-    contexts: Mutex<HashMap<String, ConversationContext>>, // file_path -> context
+    contexts: Mutex<HashMap<String, ConversationContext>>,
     default_model: Mutex<String>,
+    api_url: Mutex<String>,
 }
 
 impl LlmModule {
     pub fn new() -> Self {
         LlmModule {
             contexts: Mutex::new(HashMap::new()),
-            default_model: Mutex::new("qwen2.5:14b".to_string()),
+            default_model: Mutex::new("kimi-k2.5:cloud".to_string()),
+            api_url: Mutex::new(DEFAULT_OLLAMA_URL.to_string()),
         }
+    }
+    
+    /// Set custom API URL (for cloud or custom server)
+    pub fn set_api_url(&self, url: &str) {
+        let mut api_url = self.api_url.lock().unwrap();
+        *api_url = url.trim_end_matches('/').to_string();
     }
     
     fn capability_schemas() -> Vec<Capability> {
         vec![
-            // Chat
             Capability {
                 name: "chat".to_string(),
                 description: "Send message to LLM and get response".to_string(),
@@ -60,9 +94,9 @@ impl LlmModule {
                     "type": "object",
                     "properties": {
                         "message": {"type": "string", "description": "User message"},
-                        "model": {"type": "string", "description": "Model name (optional)"},
-                        "context_id": {"type": "string", "description": "Context identifier, e.g., file path"},
-                        "stream": {"type": "boolean", "default": false, "description": "Stream response"}
+                        "model": {"type": "string", "description": "Model name (optional, default: kimi-k2.5:cloud)"},
+                        "context_id": {"type": "string", "description": "Context identifier (e.g., file path)", "default": "default"},
+                        "stream": {"type": "boolean", "default": false}
                     },
                     "required": ["message"]
                 }),
@@ -76,11 +110,15 @@ impl LlmModule {
                     }
                 }),
             },
-            // List models
             Capability {
                 name: "list_models".to_string(),
                 description: "List available Ollama models".to_string(),
-                input_schema: serde_json::json!({"type": "object"}),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "api_url": {"type": "string", "description": "Optional custom API URL"}
+                    }
+                }),
                 output_schema: serde_json::json!({
                     "type": "object",
                     "properties": {
@@ -94,18 +132,18 @@ impl LlmModule {
                                     "modified": {"type": "string"}
                                 }
                             }
-                        }
+                        },
+                        "api_url": {"type": "string"}
                     }
                 }),
             },
-            // Get context
             Capability {
                 name: "get_context".to_string(),
                 description: "Get conversation context".to_string(),
                 input_schema: serde_json::json!({
                     "type": "object",
                     "properties": {
-                        "context_id": {"type": "string", "description": "Context identifier"}
+                        "context_id": {"type": "string"}
                     },
                     "required": ["context_id"]
                 }),
@@ -119,7 +157,6 @@ impl LlmModule {
                     }
                 }),
             },
-            // Clear context
             Capability {
                 name: "clear_context".to_string(),
                 description: "Clear conversation history".to_string(),
@@ -132,12 +169,9 @@ impl LlmModule {
                 }),
                 output_schema: serde_json::json!({
                     "type": "object",
-                    "properties": {
-                        "success": {"type": "boolean"}
-                    }
+                    "properties": {"success": {"type": "boolean"}}
                 }),
             },
-            // Set system prompt
             Capability {
                 name: "set_system_prompt".to_string(),
                 description: "Set system prompt for context".to_string(),
@@ -151,12 +185,9 @@ impl LlmModule {
                 }),
                 output_schema: serde_json::json!({
                     "type": "object",
-                    "properties": {
-                        "success": {"type": "boolean"}
-                    }
+                    "properties": {"success": {"type": "boolean"}}
                 }),
             },
-            // Summarize
             Capability {
                 name: "summarize".to_string(),
                 description: "Summarize text content".to_string(),
@@ -164,8 +195,7 @@ impl LlmModule {
                     "type": "object",
                     "properties": {
                         "content": {"type": "string", "description": "Text to summarize"},
-                        "max_length": {"type": "integer", "default": 200, "description": "Max summary length"},
-                        "model": {"type": "string", "description": "Optional model override"}
+                        "max_length": {"type": "integer", "default": 200}
                     },
                     "required": ["content"]
                 }),
@@ -178,7 +208,6 @@ impl LlmModule {
                     }
                 }),
             },
-            // Ask about file
             Capability {
                 name: "ask_about_file".to_string(),
                 description: "Ask questions about file content".to_string(),
@@ -187,7 +216,6 @@ impl LlmModule {
                     "properties": {
                         "file_path": {"type": "string"},
                         "question": {"type": "string"},
-                        "file_content": {"type": "string", "description": "Current file content snippet"},
                         "context_id": {"type": "string"}
                     },
                     "required": ["file_path", "question", "context_id"]
@@ -200,16 +228,14 @@ impl LlmModule {
                     }
                 }),
             },
-            // Generate from template
             Capability {
                 name: "generate".to_string(),
-                description: "Generate text from template/prompt".to_string(),
+                description: "Generate text from prompt".to_string(),
                 input_schema: serde_json::json!({
                     "type": "object",
                     "properties": {
-                        "prompt": {"type": "string", "description": "Generation prompt"},
-                        "template": {"type": "string", "description": "Template type: code, doc, explain"},
-                        "model": {"type": "string"}
+                        "prompt": {"type": "string"},
+                        "template": {"type": "string", "description": "Template type: code, doc, explain"}
                     },
                     "required": ["prompt"]
                 }),
@@ -224,13 +250,13 @@ impl LlmModule {
         ]
     }
     
-    fn get_or_create_context(&self, context_id: &str, model: Option<&str>) -> ConversationContext {
+    fn get_or_create_context(&self, context_id: &str) -> ConversationContext {
         let mut contexts = self.contexts.lock().unwrap();
         let default_model = self.default_model.lock().unwrap().clone();
         
         contexts.entry(context_id.to_string()).or_insert_with(|| {
             ConversationContext {
-                model: model.map(|m| m.to_string()).unwrap_or(default_model),
+                model: default_model.clone(),
                 messages: Vec::new(),
                 system_prompt: None,
             }
@@ -242,7 +268,8 @@ impl LlmModule {
         contexts.insert(context_id.to_string(), context);
     }
     
-    async fn call_ollama(&self, model: &str, messages: Vec<ChatMessage>) -> Result<String, ModuleError> {
+    async fn call_ollama_chat(&self, model: &str, messages: Vec<ChatMessage>) -> Result<String, ModuleError> {
+        let api_url = self.api_url.lock().unwrap().clone();
         let client = reqwest::Client::new();
         
         let request_body = serde_json::json!({
@@ -251,24 +278,27 @@ impl LlmModule {
             "stream": false
         });
         
+        let url = format!("{}/api/chat", api_url);
+        
         let response = client
-            .post(format!("{}/api/chat", OLLAMA_API_URL))
+            .post(&url)
+            .header("Content-Type", "application/json")
             .json(&request_body)
+            .timeout(std::time::Duration::from_secs(120))
             .send()
             .await
-            .map_err(|e| ModuleError::new("ollama_error", &format!("Failed to connect to Ollama: {}", e)))?;
+            .map_err(|e| ModuleError::new("connection_error", &format!("Failed to connect to Ollama: {}", e)))?;
         
         if !response.status().is_success() {
-            return Err(ModuleError::new("ollama_error", &format!("Ollama error: {}", response.status())));
+            let status = response.status();
+            let text = response.text().await.unwrap_or_default();
+            return Err(ModuleError::new("api_error", &format!("Ollama API error {}: {}", status, text)));
         }
         
-        let result: Value = response.json().await
-            .map_err(|e| ModuleError::new("parse_error", &e.to_string()))?;
+        let result: OllamaResponse = response.json().await
+            .map_err(|e| ModuleError::new("parse_error", &format!("Failed to parse response: {}", e)))?;
         
-        result["message"]["content"]
-            .as_str()
-            .map(|s| s.to_string())
-            .ok_or_else(|| ModuleError::new("response_error", "No content in response"))
+        Ok(result.message.content)
     }
 }
 
@@ -277,7 +307,7 @@ impl Module for LlmModule {
         ModuleInfo {
             name: "llm".to_string(),
             version: "1.0.0".to_string(),
-            description: "Local LLM integration via Ollama for chat, summarization, and code assistance".to_string(),
+            description: "LLM integration via Ollama API (cloud or local)".to_string(),
             capabilities: Self::capability_schemas(),
         }
     }
@@ -299,10 +329,12 @@ impl Module for LlmModule {
     fn get_state(&self) -> Value {
         let contexts = self.contexts.lock().unwrap();
         let default_model = self.default_model.lock().unwrap();
+        let api_url = self.api_url.lock().unwrap();
         
         serde_json::json!({
             "type": "llm_module",
             "default_model": *default_model,
+            "api_url": *api_url,
             "active_contexts": contexts.len()
         })
     }
@@ -311,6 +343,10 @@ impl Module for LlmModule {
         if let Some(model) = state["default_model"].as_str() {
             let mut default_model = self.default_model.lock().unwrap();
             *default_model = model.to_string();
+        }
+        if let Some(url) = state["api_url"].as_str() {
+            let mut api_url = self.api_url.lock().unwrap();
+            *api_url = url.to_string();
         }
         Ok(())
     }
@@ -321,77 +357,113 @@ impl LlmModule {
         let message = input["message"].as_str()
             .ok_or_else(|| ModuleError::new("invalid_input", "Missing 'message'"))?;
         let context_id = input["context_id"].as_str().unwrap_or("default");
-        let model_override = input["model"].as_str();
         
-        let mut context = self.get_or_create_context(context_id, model_override);
-        let model = context.model.clone();
+        // Get context and extract all needed data before async calls
+        let (model, system_prompt) = {
+            let context = self.get_or_create_context(context_id);
+            (context.model.clone(), context.system_prompt.clone())
+        };
         
-        // Add system prompt if present
-        if let Some(ref system) = context.system_prompt {
-            if context.messages.is_empty() {
-                context.messages.push(ChatMessage {
-                    role: "system".to_string(),
-                    content: system.clone(),
-                });
-            }
+        // Build messages
+        let mut messages: Vec<ChatMessage> = Vec::new();
+        
+        if let Some(ref system) = system_prompt {
+            messages.push(ChatMessage {
+                role: "system".to_string(),
+                content: system.clone(),
+            });
         }
         
-        // Add user message
-        context.messages.push(ChatMessage {
+        messages.push(ChatMessage {
             role: "user".to_string(),
             content: message.to_string(),
         });
         
-        // For now, return placeholder - async would need tokio::runtime
-        // In real implementation, use tauri::async_runtime::block_on
-        let response = format!("[LLM Response for: {}]", message);
+        // Call Ollama synchronously
+        let response_text = tauri::async_runtime::block_on(async {
+            self.call_ollama_chat(&model, messages).await
+        })?;
         
-        // Add assistant response
-        context.messages.push(ChatMessage {
-            role: "assistant".to_string(),
-            content: response.clone(),
-        });
-        
-        self.save_context(context_id, context.clone());
+        // Update context with new messages
+        {
+            let mut contexts = self.contexts.lock().unwrap();
+            if let Some(ctx) = contexts.get_mut(context_id) {
+                ctx.messages.push(ChatMessage {
+                    role: "user".to_string(),
+                    content: message.to_string(),
+                });
+                ctx.messages.push(ChatMessage {
+                    role: "assistant".to_string(),
+                    content: response_text.clone(),
+                });
+            }
+        }
         
         Ok(serde_json::json!({
-            "response": response,
+            "response": response_text,
             "model": model,
-            "context_length": context.messages.len(),
             "done": true
         }))
     }
     
-    fn cmd_list_models(&self, _input: Value) -> Result<Value, ModuleError> {
-        // Placeholder - would call Ollama API
-        let models = vec![
-            serde_json::json!({
-                "name": "qwen2.5:14b",
-                "size": 9000000000i64,
-                "modified": "2024-01-15T10:00:00Z"
-            }),
-            serde_json::json!({
-                "name": "llama3.2",
-                "size": 2000000000i64,
-                "modified": "2024-01-10T08:00:00Z"
-            }),
-        ];
+    fn cmd_list_models(&self, input: Value) -> Result<Value, ModuleError> {
+        let api_url = input["api_url"].as_str()
+            .map(String::from)
+            .unwrap_or_else(|| self.api_url.lock().unwrap().clone());
         
-        Ok(serde_json::json!({"models": models}))
+        let client = reqwest::Client::new();
+        let url = format!("{}/api/tags", api_url);
+        
+        let response = tauri::async_runtime::block_on(async {
+            client.get(&url).timeout(std::time::Duration::from_secs(10)).send().await
+        })
+        .map_err(|e| ModuleError::new("connection_error", &format!("Failed to connect: {}", e)))?;
+        
+        if !response.status().is_success() {
+            return Err(ModuleError::new("api_error", &format!("API error: {}", response.status())));
+        }
+        
+        let result: OllamaModelsResponse = tauri::async_runtime::block_on(async {
+            response.json::<OllamaModelsResponse>().await
+        })
+        .map_err(|e| ModuleError::new("parse_error", &e.to_string()))?;
+        
+        // Convert to JSON-friendly format
+        let models: Vec<serde_json::Value> = result.models.into_iter().map(|m| {
+            serde_json::json!({
+                "name": m.name,
+                "size": m.size,
+                "modified": m.modified_at
+            })
+        }).collect();
+        
+        Ok(serde_json::json!({
+            "models": models,
+            "api_url": api_url
+        }))
     }
     
     fn cmd_get_context(&self, input: Value) -> Result<Value, ModuleError> {
         let context_id = input["context_id"].as_str()
             .ok_or_else(|| ModuleError::new("invalid_input", "Missing 'context_id'"))?;
         
-        let context = self.get_or_create_context(context_id, None);
+        let contexts = self.contexts.lock().unwrap();
         
-        Ok(serde_json::json!({
-            "model": context.model,
-            "messages": context.messages,
-            "message_count": context.messages.len(),
-            "system_prompt": context.system_prompt
-        }))
+        if let Some(context) = contexts.get(context_id) {
+            Ok(serde_json::json!({
+                "model": context.model,
+                "messages": context.messages,
+                "message_count": context.messages.len(),
+                "system_prompt": context.system_prompt
+            }))
+        } else {
+            Ok(serde_json::json!({
+                "model": "",
+                "messages": [],
+                "message_count": 0,
+                "system_prompt": null
+            }))
+        }
     }
     
     fn cmd_clear_context(&self, input: Value) -> Result<Value, ModuleError> {
@@ -410,8 +482,9 @@ impl LlmModule {
         let prompt = input["prompt"].as_str()
             .ok_or_else(|| ModuleError::new("invalid_input", "Missing 'prompt'"))?;
         
-        let mut context = self.get_or_create_context(context_id, None);
+        let mut context = self.get_or_create_context(context_id);
         context.system_prompt = Some(prompt.to_string());
+        context.messages.retain(|m| m.role != "system"); // Remove old system messages
         self.save_context(context_id, context);
         
         Ok(serde_json::json!({"success": true}))
@@ -422,18 +495,27 @@ impl LlmModule {
             .ok_or_else(|| ModuleError::new("invalid_input", "Missing 'content'"))?;
         let max_length = input["max_length"].as_u64().unwrap_or(200) as usize;
         
-        let original_length = content.len();
+        let default_model = self.default_model.lock().unwrap().clone();
+        let model = input["model"].as_str().unwrap_or(&default_model);
+        let api_url = self.api_url.lock().unwrap().clone();
         
-        // Placeholder - would actually call LLM
-        let summary = if content.len() > max_length {
-            format!("{}... [Summary of {} chars]", &content[..max_length.min(content.len())], original_length)
-        } else {
-            content.to_string()
-        };
+        let prompt = format!(
+            "Summarize the following text in {} characters or less:\n\n{}",
+            max_length, content
+        );
+        
+        let messages = vec![ChatMessage {
+            role: "user".to_string(),
+            content: prompt,
+        }];
+        
+        let summary = tauri::async_runtime::block_on(async {
+            self.call_ollama_chat(model, messages).await
+        })?;
         
         Ok(serde_json::json!({
             "summary": summary,
-            "original_length": original_length,
+            "original_length": content.len(),
             "summary_length": summary.len()
         }))
     }
@@ -443,33 +525,37 @@ impl LlmModule {
             .ok_or_else(|| ModuleError::new("invalid_input", "Missing 'file_path'"))?;
         let question = input["question"].as_str()
             .ok_or_else(|| ModuleError::new("invalid_input", "Missing 'question'"))?;
-        let context_id = input["context_id"].as_str().unwrap_or(file_path);
+        let context_id = input["context_id"].as_str().unwrap_or("default");
         
-        let mut context = self.get_or_create_context(context_id, None);
+        let mut context = self.get_or_create_context(context_id);
+        let model = context.model.clone();
         
-        // Build prompt with file context
-        let prompt = format!(
-            "File: {}\n\nQuestion: {}",
+        // Build context-aware question
+        let content = format!(
+            "You are analyzing file: {}\n\nUser question: {}\n\nProvide a helpful response based on the file content.",
             file_path, question
         );
         
         context.messages.push(ChatMessage {
             role: "user".to_string(),
-            content: prompt,
+            content,
         });
         
-        let response = format!("[Analysis of {}: {}]", file_path, question);
+        let messages = context.messages.clone();
+        
+        let response = tauri::async_runtime::block_on(async {
+            self.call_ollama_chat(&model, messages).await
+        })?;
         
         context.messages.push(ChatMessage {
             role: "assistant".to_string(),
             content: response.clone(),
         });
-        
         self.save_context(context_id, context);
         
         Ok(serde_json::json!({
             "response": response,
-            "relevant_sections": vec!["lines 1-10", "function foo()"]
+            "relevant_sections": []
         }))
     }
     
@@ -478,11 +564,24 @@ impl LlmModule {
             .ok_or_else(|| ModuleError::new("invalid_input", "Missing 'prompt'"))?;
         let template = input["template"].as_str().unwrap_or("general");
         
-        // Placeholder generation
-        let generated = format!(
-            "// Generated using template: {}\n// From prompt: {}\n\n[Generated content would appear here]",
-            template, prompt
-        );
+        let default_model = self.default_model.lock().unwrap().clone();
+        let model = input["model"].as_str().unwrap_or(&default_model);
+        
+        let formatted_prompt = match template {
+            "code" => format!("Write code for the following:\n{}", prompt),
+            "doc" => format!("Write documentation for:\n{}", prompt),
+            "explain" => format!("Explain this:\n{}", prompt),
+            _ => prompt.to_string(),
+        };
+        
+        let messages = vec![ChatMessage {
+            role: "user".to_string(),
+            content: formatted_prompt,
+        }];
+        
+        let generated = tauri::async_runtime::block_on(async {
+            self.call_ollama_chat(model, messages).await
+        })?;
         
         Ok(serde_json::json!({
             "generated": generated,

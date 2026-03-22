@@ -17,6 +17,9 @@ pub fn init() {
     // Register marks module
     marks_module::register();
     
+    // Register llm module
+    llm_module::register();
+    
     // Register sftp module
     sftp_module::register();
     
@@ -224,6 +227,54 @@ Upload local file to remote.
 Download remote file to local.
 - Input: `{"connection_id": "server1", "remote_path": "/remote/file.txt", "local_path": "/local/file.txt"}`
 - Output: `{"success": true, "bytes_transferred": 1234}`
+
+## LLM Module (`llm`)
+
+LLM integration via Ollama API (supports cloud endpoints like ollama.com).
+
+Default model: `kimi-k2.5:cloud`
+
+### Capabilities
+
+#### `llm.chat`
+Send message to LLM and get response.
+- Input: `{"message": "Hello, explain this code", "context_id": "file_path", "model": "kimi-k2.5:cloud"}`
+- Output: `{"response": "...", "model": "kimi-k2.5:cloud", "context_length": 4, "done": true}`
+
+#### `llm.list_models`
+List available Ollama models.
+- Input: `{"api_url": "https://ollama.com"}`
+- Output: `{"models": [{"name": "llama3", "size": 123456}, ...], "api_url": "..."}`
+
+#### `llm.get_context`
+Get conversation context.
+- Input: `{"context_id": "file_path"}`
+- Output: `{"model": "...", "messages": [...], "message_count": 4, "system_prompt": "..."}`
+
+#### `llm.clear_context`
+Clear conversation history.
+- Input: `{"context_id": "file_path"}`
+- Output: `{"success": true}`
+
+#### `llm.set_system_prompt`
+Set system prompt.
+- Input: `{"context_id": "file_path", "prompt": "You are a code reviewer"}`
+- Output: `{"success": true}`
+
+#### `llm.summarize`
+Summarize text.
+- Input: `{"content": "Long text to summarize...", "max_length": 200}`
+- Output: `{"summary": "...", "original_length": 5000, "summary_length": 150}`
+
+#### `llm.ask_about_file`
+Ask questions about file content.
+- Input: `{"file_path": "/path/to/file", "question": "What does this function do?", "context_id": "..."}`
+- Output: `{"response": "...", "relevant_sections": []}`
+
+#### `llm.generate`
+Generate text from prompt.
+- Input: `{"prompt": "Write a README", "template": "doc"}`
+- Output: `{"generated": "...", "template_used": "doc"}`
 
 ## Usage Example
 
