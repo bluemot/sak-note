@@ -1,39 +1,55 @@
 //! File Module - Large file handling with JSON interface
 //! 
+//! Now uses VfsManager for unified local/SFTP operations.
+//! 
 //! Exposed capabilities:
 //! - file.open: Open a file for reading/editing
 //! - file.close: Close a file
 //! - file.read: Read bytes from file
 //! - file.read_text: Read text from file
-//! - file.write: Write/insert bytes
+//! - file.insert: Insert bytes
 //! - file.delete: Delete bytes
 //! - file.replace: Replace bytes
 //! - file.save: Save changes
 //! - file.save_as: Save to new file
 //! - file.undo: Undo last operation
 //! - file.redo: Redo last undone operation
-//! - file.search: Search for pattern
 //! - file.get_info: Get file information
 //! - file.get_hex: Get hex view
 
 use crate::modular::{Module, ModuleInfo, Capability, ModuleError};
-use crate::file_engine::{FileEngine, EditableFileManager, EditOp};
+use crate::vfs::manager::{VfsManager, VfsFileHandle};
+use crate::vfs::EditOp;
 use serde::{Serialize, Deserialize};
 use serde_json::Value;
-use std::sync::Arc;
-use std::sync::RwLock;
+use std::collections::HashMap;
+use std::sync::Mutex;
 
-/// File module implementation
-pub struct FileModule;
+/// File info response
+#[derive(Debug, Serialize)]
+struct FileInfoResponse {
+    path: String,
+    size: u64,
+    effective_size: u64,
+    has_changes: bool,
+    can_undo: bool,
+    can_redo: bool,
+}
+
+/// File module implementation using VfsManager
+pub struct FileModule {
+    handles: Mutex<HashMap<String, VfsFileHandle>>,
+}
 
 impl FileModule {
     pub fn new() -> Self {
-        FileModule
+        FileModule {
+            handles: Mutex::new(HashMap::new()),
+        }
     }
     
     fn capability_schemas() -> Vec<Capability> {
         vec![
-            // File operations
             Capability {
                 name: "open".to_string(),
                 description: "Open a file for editing".to_string(),
@@ -49,8 +65,8 @@ impl FileModule {
                     "properties": {
                         "path": {"type": "string"},
                         "size": {"type": "integer"},
-                        "chunks": {"type": "integer"},
-                        "editable": {"type": "boolean"}
+                        "effective_size": {"type": "integer"},
+                        "has_changes": {"type": "boolean"}
                     }
                 }),
             },
@@ -66,7 +82,6 @@ impl FileModule {
                 }),
                 output_schema: serde_json::json!({"type": "null"}),
             },
-            // Read operations
             Capability {
                 name: "read".to_string(),
                 description: "Read raw bytes from file".to_string(),
@@ -109,7 +124,6 @@ impl FileModule {
                     }
                 }),
             },
-            // Edit operations
             Capability {
                 name: "insert".to_string(),
                 description: "Insert bytes at position".to_string(),
@@ -118,7 +132,7 @@ impl FileModule {
                     "properties": {
                         "path": {"type": "string"},
                         "offset": {"type": "integer", "minimum": 0},
-                        "data": {"type": "array", "items": {"type": "integer"}, "description": "Bytes to insert"}
+                        "data": {"type": "array", "items": {"type": "integer"}}
                     },
                     "required": ["path", "offset", "data"]
                 }),
@@ -149,11 +163,10 @@ impl FileModule {
                         "length": {"type": "integer", "minimum": 0},
                         "data": {"type": "array", "items": {"type": "integer"}}
                     },
-                    "required": ["path", "offset", "length", "data"]
+                    "required": ["path", "offset", "data"]
                 }),
                 output_schema: serde_json::json!({"type": "object", "properties": {"success": {"type": "boolean"}}}),
             },
-            // Save operations
             Capability {
                 name: "save".to_string(),
                 description: "Save changes to file".to_string(),
@@ -166,20 +179,6 @@ impl FileModule {
                 }),
                 output_schema: serde_json::json!({"type": "object", "properties": {"success": {"type": "boolean"}}}),
             },
-            Capability {
-                name: "save_as".to_string(),
-                description: "Save to new file".to_string(),
-                input_schema: serde_json::json!({
-                    "type": "object",
-                    "properties": {
-                        "source_path": {"type": "string"},
-                        "target_path": {"type": "string"}
-                    },
-                    "required": ["source_path", "target_path"]
-                }),
-                output_schema: serde_json::json!({"type": "object", "properties": {"success": {"type": "boolean"}}}),
-            },
-            // Undo/Redo
             Capability {
                 name: "undo".to_string(),
                 description: "Undo last operation".to_string(),
@@ -218,39 +217,6 @@ impl FileModule {
                     }
                 }),
             },
-            // Search
-            Capability {
-                name: "search".to_string(),
-                description: "Search for pattern in file".to_string(),
-                input_schema: serde_json::json!({
-                    "type": "object",
-                    "properties": {
-                        "path": {"type": "string"},
-                        "pattern": {"type": "string", "description": "Text or hex pattern"},
-                        "is_hex": {"type": "boolean", "default": false},
-                        "start_offset": {"type": "integer", "default": 0}
-                    },
-                    "required": ["path", "pattern"]
-                }),
-                output_schema: serde_json::json!({
-                    "type": "object",
-                    "properties": {
-                        "results": {
-                            "type": "array",
-                            "items": {
-                                "type": "object",
-                                "properties": {
-                                    "offset": {"type": "integer"},
-                                    "length": {"type": "integer"},
-                                    "preview": {"type": "string"}
-                                }
-                            }
-                        },
-                        "total": {"type": "integer"}
-                    }
-                }),
-            },
-            // Info
             Capability {
                 name: "get_info".to_string(),
                 description: "Get file information".to_string(),
@@ -273,7 +239,6 @@ impl FileModule {
                     }
                 }),
             },
-            // Hex view
             Capability {
                 name: "get_hex".to_string(),
                 description: "Get hex representation of bytes".to_string(),
@@ -282,7 +247,7 @@ impl FileModule {
                     "properties": {
                         "path": {"type": "string"},
                         "offset": {"type": "integer", "minimum": 0},
-                        "length": {"type": "integer", "minimum": 1, "maximum": 4096}
+                        "length": {"type": "integer", "minimum": 1}
                     },
                     "required": ["path", "offset", "length"]
                 }),
@@ -311,8 +276,8 @@ impl Module for FileModule {
     fn info(&self) -> ModuleInfo {
         ModuleInfo {
             name: "file".to_string(),
-            version: "1.0.0".to_string(),
-            description: "Large file handling with memory-mapped I/O and edit journaling".to_string(),
+            version: "2.0.0".to_string(),
+            description: "Large file handling via VFS (local/SFTP)".to_string(),
             capabilities: Self::capability_schemas(),
         }
     }
@@ -327,25 +292,20 @@ impl Module for FileModule {
             "delete" => self.cmd_delete(input),
             "replace" => self.cmd_replace(input),
             "save" => self.cmd_save(input),
-            "save_as" => self.cmd_save_as(input),
             "undo" => self.cmd_undo(input),
             "redo" => self.cmd_redo(input),
-            "search" => self.cmd_search(input),
             "get_info" => self.cmd_get_info(input),
             "get_hex" => self.cmd_get_hex(input),
-            _ => Err(ModuleError::new("unknown_capability", &format!("Unknown capability: {}", capability))),
+            _ => Err(ModuleError::new("unknown_capability", &format!("Unknown: {}", capability))),
         }
     }
     
     fn get_state(&self) -> Value {
-        // Return list of open files
-        let modules: Vec<String> = crate::modular::ModuleRegistry::list_modules()
-            .iter()
-            .map(|m| m.name.clone())
-            .collect();
+        let handles = self.handles.lock().unwrap();
         serde_json::json!({
-            "type": "file_module",
-            "loaded": true
+            "type": "file_module_v2",
+            "open_files": handles.len(),
+            "files": handles.keys().collect::<Vec<_>>()
         })
     }
     
@@ -355,320 +315,247 @@ impl Module for FileModule {
 }
 
 impl FileModule {
-    // Command implementations
+    fn get_handle(&self, path: &str) -> Result<std::sync::MutexGuard<'_, HashMap<String, VfsFileHandle>>, ModuleError> {
+        self.handles.lock().map_err(|e| ModuleError::new("lock_error", &e.to_string()))
+    }
     
     fn cmd_open(&self, input: Value) -> Result<Value, ModuleError> {
         let path = input["path"].as_str()
             .ok_or_else(|| ModuleError::new("invalid_input", "Missing 'path'"))?;
         
-        match FileEngine::open_for_edit(path) {
-            Ok(manager) => {
-                let guard = manager.read().map_err(|e| 
-                    ModuleError::new("lock_error", &e.to_string())
-                )?;
-                
-                Ok(serde_json::json!({
-                    "path": path,
-                    "size": guard.effective_size(),
-                    "chunks": ((guard.effective_size() + 65535) / 65536) as usize,
-                    "editable": true,
-                    "has_changes": guard.has_changes()
-                }))
-            }
-            Err(e) => Err(ModuleError::new("open_failed", &e.to_string())),
-        }
+        // Open via VfsManager
+        let handle = VfsManager::open(path)
+            .map_err(|e| ModuleError::new("open_error", &e.to_string()))?;
+        
+        let mut handles = self.get_handle(path)?;
+        handles.insert(path.to_string(), handle);
+        
+        let handle = handles.get(path).unwrap();
+        
+        Ok(serde_json::json!({
+            "path": path,
+            "size": handle.metadata().map(|m| m.size).unwrap_or(0),
+            "effective_size": handle.effective_size(),
+            "has_changes": handle.has_changes()
+        }))
     }
     
     fn cmd_close(&self, input: Value) -> Result<Value, ModuleError> {
         let path = input["path"].as_str()
             .ok_or_else(|| ModuleError::new("invalid_input", "Missing 'path'"))?;
         
-        FileEngine::close_editable(path);
-        FileEngine::close_file(path);
-        Ok(serde_json::json!(null))
+        let mut handles = self.get_handle(path)?;
+        handles.remove(path);
+        VfsManager::close(path);
+        
+        Ok(serde_json::Value::Null)
     }
     
     fn cmd_read(&self, input: Value) -> Result<Value, ModuleError> {
         let path = input["path"].as_str()
             .ok_or_else(|| ModuleError::new("invalid_input", "Missing 'path'"))?;
-        let offset = input["offset"].as_u64().unwrap_or(0) as usize;
+        let offset = input["offset"].as_u64().unwrap_or(0);
         let length = input["length"].as_u64().unwrap_or(1024) as usize;
         
-        if let Some(manager) = FileEngine::get_editable(path) {
-            let guard = manager.read().map_err(|e| 
-                ModuleError::new("lock_error", &e.to_string())
-            )?;
-            
-            let data = guard.get_range(offset, length);
-            Ok(serde_json::json!({
-                "data": data,
-                "offset": offset,
-                "length": data.len()
-            }))
-        } else {
-            Err(ModuleError::new("file_not_open", "File not open"))
-        }
+        let mut handles = self.get_handle(path)?;
+        let handle = handles.get_mut(path)
+            .ok_or_else(|| ModuleError::new("not_open", "File not open"))?;
+        
+        let data = handle.read_range(offset, length);
+        
+        Ok(serde_json::json!({
+            "data": data,
+            "offset": offset,
+            "length": data.len()
+        }))
     }
     
     fn cmd_read_text(&self, input: Value) -> Result<Value, ModuleError> {
         let path = input["path"].as_str()
             .ok_or_else(|| ModuleError::new("invalid_input", "Missing 'path'"))?;
-        let offset = input["offset"].as_u64().unwrap_or(0) as usize;
+        let offset = input["offset"].as_u64().unwrap_or(0);
         let length = input["length"].as_u64().unwrap_or(1024) as usize;
         
-        if let Some(manager) = FileEngine::get_editable(path) {
-            let guard = manager.read().map_err(|e| 
-                ModuleError::new("lock_error", &e.to_string())
-            )?;
-            
-            let text = guard.get_text(offset, length);
-            Ok(serde_json::json!({
-                "text": text,
-                "offset": offset,
-                "length": text.len()
-            }))
-        } else {
-            Err(ModuleError::new("file_not_open", "File not open"))
-        }
+        let mut handles = self.get_handle(path)?;
+        let handle = handles.get_mut(path)
+            .ok_or_else(|| ModuleError::new("not_open", "File not open"))?;
+        
+        let text = handle.read_text(offset, length);
+        
+        Ok(serde_json::json!({
+            "text": text,
+            "offset": offset,
+            "length": text.len()
+        }))
     }
     
     fn cmd_insert(&self, input: Value) -> Result<Value, ModuleError> {
         let path = input["path"].as_str()
             .ok_or_else(|| ModuleError::new("invalid_input", "Missing 'path'"))?;
-        let offset = input["offset"].as_u64().unwrap_or(0) as usize;
+        let offset = input["offset"].as_u64().unwrap_or(0);
         let data: Vec<u8> = input["data"].as_array()
             .ok_or_else(|| ModuleError::new("invalid_input", "Missing 'data'"))?
             .iter()
             .filter_map(|v| v.as_u64().map(|n| n as u8))
             .collect();
         
-        if let Some(manager) = FileEngine::get_editable(path) {
-            let mut guard = manager.write().map_err(|e| 
-                ModuleError::new("lock_error", &e.to_string())
-            )?;
-            
-            guard.apply_edit(EditOp::Insert { offset, data });
-            Ok(serde_json::json!({"success": true}))
-        } else {
-            Err(ModuleError::new("file_not_open", "File not open"))
-        }
+        let mut handles = self.get_handle(path)?;
+        let handle = handles.get_mut(path)
+            .ok_or_else(|| ModuleError::new("not_open", "File not open"))?;
+        
+        handle.apply_edit(EditOp::Insert { offset, data });
+        
+        Ok(serde_json::json!({"success": true}))
     }
     
     fn cmd_delete(&self, input: Value) -> Result<Value, ModuleError> {
         let path = input["path"].as_str()
             .ok_or_else(|| ModuleError::new("invalid_input", "Missing 'path'"))?;
-        let offset = input["offset"].as_u64().unwrap_or(0) as usize;
-        let length = input["length"].as_u64().unwrap_or(1) as usize;
+        let offset = input["offset"].as_u64().unwrap_or(0);
+        let length = input["length"].as_u64().unwrap_or(1);
         
-        if let Some(manager) = FileEngine::get_editable(path) {
-            let mut guard = manager.write().map_err(|e| 
-                ModuleError::new("lock_error", &e.to_string())
-            )?;
-            
-            guard.apply_edit(EditOp::Delete { offset, length });
-            Ok(serde_json::json!({"success": true}))
-        } else {
-            Err(ModuleError::new("file_not_open", "File not open"))
-        }
+        let mut handles = self.get_handle(path)?;
+        let handle = handles.get_mut(path)
+            .ok_or_else(|| ModuleError::new("not_open", "File not open"))?;
+        
+        handle.apply_edit(EditOp::Delete { offset, length });
+        
+        Ok(serde_json::json!({"success": true}))
     }
     
     fn cmd_replace(&self, input: Value) -> Result<Value, ModuleError> {
         let path = input["path"].as_str()
             .ok_or_else(|| ModuleError::new("invalid_input", "Missing 'path'"))?;
-        let offset = input["offset"].as_u64().unwrap_or(0) as usize;
-        let length = input["length"].as_u64().unwrap_or(0) as usize;
+        let offset = input["offset"].as_u64().unwrap_or(0);
+        let length = input["length"].as_u64().unwrap_or(0);
         let data: Vec<u8> = input["data"].as_array()
             .ok_or_else(|| ModuleError::new("invalid_input", "Missing 'data'"))?
             .iter()
             .filter_map(|v| v.as_u64().map(|n| n as u8))
             .collect();
         
-        if let Some(manager) = FileEngine::get_editable(path) {
-            let mut guard = manager.write().map_err(|e| 
-                ModuleError::new("lock_error", &e.to_string())
-            )?;
-            
-            guard.apply_edit(EditOp::Replace { offset, length, data });
-            Ok(serde_json::json!({"success": true}))
-        } else {
-            Err(ModuleError::new("file_not_open", "File not open"))
+        let mut handles = self.get_handle(path)?;
+        let handle = handles.get_mut(path)
+            .ok_or_else(|| ModuleError::new("not_open", "File not open"))?;
+        
+        // Replace = delete then insert
+        if length > 0 {
+            handle.apply_edit(EditOp::Delete { offset, length });
         }
+        handle.apply_edit(EditOp::Insert { offset, data });
+        
+        Ok(serde_json::json!({"success": true}))
     }
     
     fn cmd_save(&self, input: Value) -> Result<Value, ModuleError> {
         let path = input["path"].as_str()
             .ok_or_else(|| ModuleError::new("invalid_input", "Missing 'path'"))?;
         
-        if let Some(manager) = FileEngine::get_editable(path) {
-            let mut guard = manager.write().map_err(|e| 
-                ModuleError::new("lock_error", &e.to_string())
-            )?;
-            
-            match guard.save() {
-                Ok(_) => Ok(serde_json::json!({"success": true})),
-                Err(e) => Err(ModuleError::new("save_failed", &e.to_string())),
-            }
-        } else {
-            Err(ModuleError::new("file_not_open", "File not open"))
-        }
-    }
-    
-    fn cmd_save_as(&self, input: Value) -> Result<Value, ModuleError> {
-        let source = input["source_path"].as_str()
-            .ok_or_else(|| ModuleError::new("invalid_input", "Missing 'source_path'"))?;
-        let target = input["target_path"].as_str()
-            .ok_or_else(|| ModuleError::new("invalid_input", "Missing 'target_path'"))?;
+        let mut handles = self.get_handle(path)?;
+        let handle = handles.get_mut(path)
+            .ok_or_else(|| ModuleError::new("not_open", "File not open"))?;
         
-        if let Some(manager) = FileEngine::get_editable(source) {
-            let guard = manager.read().map_err(|e| 
-                ModuleError::new("lock_error", &e.to_string())
-            )?;
-            
-            match guard.save_as(target) {
-                Ok(_) => Ok(serde_json::json!({"success": true})),
-                Err(e) => Err(ModuleError::new("save_failed", &e.to_string())),
-            }
-        } else {
-            Err(ModuleError::new("file_not_open", "File not open"))
-        }
+        handle.save()
+            .map_err(|e| ModuleError::new("save_error", &e.to_string()))?;
+        
+        Ok(serde_json::json!({"success": true}))
     }
     
     fn cmd_undo(&self, input: Value) -> Result<Value, ModuleError> {
         let path = input["path"].as_str()
             .ok_or_else(|| ModuleError::new("invalid_input", "Missing 'path'"))?;
         
-        if let Some(manager) = FileEngine::get_editable(path) {
-            let mut guard = manager.write().map_err(|e| 
-                ModuleError::new("lock_error", &e.to_string())
-            )?;
-            
-            let success = guard.undo();
-            Ok(serde_json::json!({
-                "success": success,
-                "can_undo": guard.can_undo(),
-                "can_redo": guard.can_redo()
-            }))
-        } else {
-            Err(ModuleError::new("file_not_open", "File not open"))
-        }
+        let mut handles = self.get_handle(path)?;
+        let handle = handles.get_mut(path)
+            .ok_or_else(|| ModuleError::new("not_open", "File not open"))?;
+        
+        let success = handle.undo();
+        
+        Ok(serde_json::json!({
+            "success": success,
+            "can_undo": handle.can_undo(),
+            "can_redo": handle.can_redo()
+        }))
     }
     
     fn cmd_redo(&self, input: Value) -> Result<Value, ModuleError> {
         let path = input["path"].as_str()
             .ok_or_else(|| ModuleError::new("invalid_input", "Missing 'path'"))?;
         
-        if let Some(manager) = FileEngine::get_editable(path) {
-            let mut guard = manager.write().map_err(|e| 
-                ModuleError::new("lock_error", &e.to_string())
-            )?;
-            
-            let success = guard.redo();
-            Ok(serde_json::json!({
-                "success": success,
-                "can_undo": guard.can_undo(),
-                "can_redo": guard.can_redo()
-            }))
-        } else {
-            Err(ModuleError::new("file_not_open", "File not open"))
-        }
-    }
-    
-    fn cmd_search(&self, input: Value) -> Result<Value, ModuleError> {
-        let path = input["path"].as_str()
-            .ok_or_else(|| ModuleError::new("invalid_input", "Missing 'path'"))?;
-        let pattern = input["pattern"].as_str()
-            .ok_or_else(|| ModuleError::new("invalid_input", "Missing 'pattern'"))?;
-        let is_hex = input["is_hex"].as_bool().unwrap_or(false);
-        let start_offset = input["start_offset"].as_u64().unwrap_or(0) as usize;
+        let mut handles = self.get_handle(path)?;
+        let handle = handles.get_mut(path)
+            .ok_or_else(|| ModuleError::new("not_open", "File not open"))?;
         
-        if let Some(manager) = FileEngine::get_editable(path) {
-            let guard = manager.read().map_err(|e| 
-                ModuleError::new("lock_error", &e.to_string())
-            )?;
-            
-            let results = if is_hex {
-                let pattern_bytes: Vec<u8> = pattern.split_whitespace()
-                    .filter_map(|s| u8::from_str_radix(s, 16).ok())
-                    .collect();
-                guard.search(&pattern_bytes, start_offset)
-            } else {
-                guard.search_text(pattern, start_offset)
-            };
-            
-            let search_results: Vec<Value> = results.iter().map(|&offset| {
-                let preview_data = guard.get_range(offset.saturating_sub(16), pattern.len() + 32);
-                let preview = String::from_utf8_lossy(&preview_data).to_string();
-                serde_json::json!({
-                    "offset": offset,
-                    "length": pattern.len(),
-                    "preview": preview
-                })
-            }).collect();
-            
-            Ok(serde_json::json!({
-                "results": search_results,
-                "total": search_results.len()
-            }))
-        } else {
-            Err(ModuleError::new("file_not_open", "File not open"))
-        }
+        let success = handle.redo();
+        
+        Ok(serde_json::json!({
+            "success": success,
+            "can_undo": handle.can_undo(),
+            "can_redo": handle.can_redo()
+        }))
     }
     
     fn cmd_get_info(&self, input: Value) -> Result<Value, ModuleError> {
         let path = input["path"].as_str()
             .ok_or_else(|| ModuleError::new("invalid_input", "Missing 'path'"))?;
         
-        if let Some(manager) = FileEngine::get_editable(path) {
-            let guard = manager.read().map_err(|e| 
-                ModuleError::new("lock_error", &e.to_string())
-            )?;
-            
-            Ok(serde_json::json!({
-                "path": path,
-                "size": guard.file_size(),
-                "effective_size": guard.effective_size(),
-                "has_changes": guard.has_changes(),
-                "can_undo": guard.can_undo(),
-                "can_redo": guard.can_redo()
-            }))
-        } else {
-            Err(ModuleError::new("file_not_open", "File not open"))
-        }
+        let mut handles = self.get_handle(path)?;
+        let handle = handles.get_mut(path)
+            .ok_or_else(|| ModuleError::new("not_open", "File not open"))?;
+        
+        let size = handle.metadata().map(|m| m.size).unwrap_or(0);
+        
+        Ok(serde_json::json!({
+            "path": path,
+            "size": size,
+            "effective_size": handle.effective_size(),
+            "has_changes": handle.has_changes(),
+            "can_undo": handle.can_undo(),
+            "can_redo": handle.can_redo()
+        }))
     }
     
     fn cmd_get_hex(&self, input: Value) -> Result<Value, ModuleError> {
         let path = input["path"].as_str()
             .ok_or_else(|| ModuleError::new("invalid_input", "Missing 'path'"))?;
-        let offset = input["offset"].as_u64().unwrap_or(0) as usize;
+        let offset = input["offset"].as_u64().unwrap_or(0);
         let length = input["length"].as_u64().unwrap_or(256) as usize;
-        let length = length.min(4096); // Limit to 4KB
         
-        if let Some(manager) = FileEngine::get_editable(path) {
-            let guard = manager.read().map_err(|e| 
-                ModuleError::new("lock_error", &e.to_string())
-            )?;
-            
-            let data = guard.get_range(offset, length);
-            let rows: Vec<Value> = data.chunks(16).enumerate().map(|(idx, bytes)| {
-                let row_offset = offset + idx * 16;
-                let hex = bytes.iter()
+        let mut handles = self.get_handle(path)?;
+        let handle = handles.get_mut(path)
+            .ok_or_else(|| ModuleError::new("not_open", "File not open"))?;
+        
+        let data = handle.read_range(offset, length);
+        
+        let rows: Vec<serde_json::Value> = data
+            .chunks(16)
+            .enumerate()
+            .map(|(idx, bytes)| {
+                let row_offset = offset as usize + idx * 16;
+                let hex = bytes
+                    .iter()
                     .map(|b| format!("{:02x}", b))
                     .collect::<Vec<_>>()
                     .join(" ");
-                let ascii: String = bytes.iter()
-                    .map(|b| if b.is_ascii_graphic() || *b == b' ' { *b as char } else { '.' })
+                let ascii: String = bytes
+                    .iter()
+                    .map(|b| {
+                        if b.is_ascii_graphic() || *b == b' ' {
+                            *b as char
+                        } else {
+                            '.'
+                        }
+                    })
                     .collect();
                 serde_json::json!({
                     "offset": row_offset,
                     "hex": hex,
                     "ascii": ascii
                 })
-            }).collect();
-            
-            Ok(serde_json::json!({"rows": rows}))
-        } else {
-            Err(ModuleError::new("file_not_open", "File not open"))
-        }
+            })
+            .collect();
+        
+        Ok(serde_json::json!({"rows": rows}))
     }
 }
 
