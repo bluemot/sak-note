@@ -417,8 +417,8 @@ impl MarksModule {
             }),
             label: updates["label"].as_str().map(|s| s.to_string()),
             note: updates["note"].as_str().map(|s| s.to_string()),
-            clear_label: updates["clear_label"].as_bool().unwrap_or(false),
-            clear_note: updates["clear_note"].as_bool().unwrap_or(false),
+            clear_label: updates["clear_label"].as_bool(),
+            clear_note: updates["clear_note"].as_bool(),
         };
         
         let mut marks = MarkEngine::get_or_create(path);
@@ -524,7 +524,7 @@ impl MarksModule {
         let all_marks = marks.get_all_marks();
         
         let mut by_color: HashMap<String, usize> = HashMap::new();
-        for mark in all_marks {
+        for mark in &all_marks {
             let color_name = format!("{:?}", mark.color).to_lowercase();
             *by_color.entry(color_name).or_insert(0) += 1;
         }

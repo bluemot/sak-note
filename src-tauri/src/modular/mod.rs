@@ -88,9 +88,7 @@ impl ModuleRegistry {
     
     /// List all registered modules
     pub fn list_modules() -> Vec<ModuleInfo> {
-        let registry = MODULE_REGISTRY.read().unwrap_or_else(|_| {
-            RwLock::new(HashMap::new()).into_inner().unwrap()
-        });
+        let registry = MODULE_REGISTRY.read().unwrap();
         registry.values().map(|m| m.info()).collect()
     }
     
@@ -109,9 +107,7 @@ impl ModuleRegistry {
     
     /// Get all capabilities across all modules
     pub fn get_all_capabilities() -> HashMap<String, Vec<Capability>> {
-        let registry = MODULE_REGISTRY.read().unwrap_or_else(|_| {
-            RwLock::new(HashMap::new()).into_inner().unwrap()
-        });
+        let registry = MODULE_REGISTRY.read().unwrap();
         
         registry.iter()
             .map(|(name, module)| {

@@ -6,6 +6,7 @@ use super::{VfsBackend, VfsFile, VfsMetadata, VfsDirEntry};
 use std::io::{self, Read, Write, Seek, SeekFrom};
 use std::net::TcpStream;
 use std::path::Path;
+use std::net::ToSocketAddrs;
 
 /// SSH/SFTP connection configuration
 pub struct SftpConfig {
@@ -27,17 +28,25 @@ pub enum SftpAuth {
 pub struct SftpBackend {
     session: ssh2::Session,
     sftp: ssh2::Sftp,
+    hostname: String,
 }
 
 impl SftpBackend {
     pub fn new(config: SftpConfig) -> io::Result<Self> {
+        // Resolve hostname
+        let addr = format!("{}:{}", config.hostname, config.port);
+        let mut addrs = addr.to_socket_addrs()
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("DNS resolution failed: {}", e)))?;
+        let addr = addrs.next()
+            .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "Could not resolve hostname"))?;
+
         // Connect to SSH server
-        let tcp = TcpStream::connect((config.hostname.as_str(), config.port))?;
+        let tcp = TcpStream::connect(addr)?;
         tcp.set_nodelay(true)?;
 
         // Create SSH session
         let mut session = ssh2::Session::new()
-            .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "Failed to create SSH session"))?;
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("Failed to create SSH session: {:?}", e)))?;
 
         session.set_tcp_stream(tcp);
         session.handshake()
@@ -68,19 +77,18 @@ impl SftpBackend {
         let sftp = session.sftp()
             .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("SFTP init failed: {}", e)))?;
 
-        Ok(SftpBackend { session, sftp })
+        Ok(SftpBackend { session, sftp, hostname: config.hostname })
     }
 
     /// Check if connection is alive
     pub fn is_connected(&self) -> bool {
-        // Try to stat root to check connection
         self.sftp.stat(Path::new("/")).is_ok()
     }
 }
 
 impl VfsBackend for SftpBackend {
     fn open_read(&self, path: &str) -> io::Result<Box<dyn VfsFile>> {
-        let file = self.sftp.open(Path::new(path))
+        let mut file = self.sftp.open(Path::new(path))
             .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("Failed to open file: {}", e)))?;
 
         let stat = file.stat()
@@ -95,14 +103,8 @@ impl VfsBackend for SftpBackend {
     }
 
     fn open_write(&self, path: &str) -> io::Result<Box<dyn VfsFile>> {
-        let file = self.sftp.open_mode(
-            Path::new(path),
-            ssh2::OpenMode::WRITE | ssh2::OpenMode::CREATE,
-            ssh2::OpenFileType::File,
-            // Default permissions
-            0o644,
-        )
-        .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("Failed to open file for write: {}", e)))?;
+        let mut file = self.sftp.open(Path::new(path))
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("Failed to open file for write: {}", e)))?;
 
         let stat = file.stat()
             .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("Failed to stat file: {}", e)))?;
@@ -132,7 +134,7 @@ impl VfsBackend for SftpBackend {
             is_dir: stat.is_dir(),
             modified: stat.mtime.map(|t| std::time::UNIX_EPOCH + std::time::Duration::from_secs(t)),
             accessed: stat.atime.map(|t| std::time::UNIX_EPOCH + std::time::Duration::from_secs(t)),
-            created: None, // SFTP doesn't typically provide creation time
+            created: None,
             permissions: stat.perm.map(|p| p as u32),
         })
     }
@@ -143,29 +145,32 @@ impl VfsBackend for SftpBackend {
 
         let mut entries = Vec::new();
 
-        while let Some((filename, stat)) = dir.read().map_err(|e| {
-            io::Error::new(io::ErrorKind::Other, format!("Failed to read dir: {}", e))
-        })? {
-            // Skip . and ..
-            if filename == "." || filename == ".." {
-                continue;
+        loop {
+            match dir.readdir() {
+                Ok((filename, stat)) => {
+                    let name = filename.to_string_lossy().to_string();
+                    if name == "." || name == ".." {
+                        continue;
+                    }
+
+                    let full_path = format!("{}/{}", path.trim_end_matches('/'), name);
+
+                    entries.push(VfsDirEntry {
+                        name,
+                        path: full_path,
+                        metadata: VfsMetadata {
+                            size: stat.size.unwrap_or(0),
+                            is_file: stat.is_file(),
+                            is_dir: stat.is_dir(),
+                            modified: stat.mtime.map(|t| std::time::UNIX_EPOCH + std::time::Duration::from_secs(t)),
+                            accessed: stat.atime.map(|t| std::time::UNIX_EPOCH + std::time::Duration::from_secs(t)),
+                            created: None,
+                            permissions: stat.perm.map(|p| p as u32),
+                        },
+                    });
+                }
+                Err(_) => break,
             }
-
-            let full_path = format!("{}/{}", path.trim_end_matches('/'), filename);
-
-            entries.push(VfsDirEntry {
-                name: filename,
-                path: full_path,
-                metadata: VfsMetadata {
-                    size: stat.size.unwrap_or(0),
-                    is_file: stat.is_file(),
-                    is_dir: stat.is_dir(),
-                    modified: stat.mtime.map(|t| std::time::UNIX_EPOCH + std::time::Duration::from_secs(t)),
-                    accessed: stat.atime.map(|t| std::time::UNIX_EPOCH + std::time::Duration::from_secs(t)),
-                    created: None,
-                    permissions: stat.perm.map(|p| p as u32),
-                },
-            });
         }
 
         Ok(entries)
@@ -197,7 +202,6 @@ pub struct SftpFile {
 
 impl Read for SftpFile {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        // Read at current position
         let bytes_read = self.handle.read(buf)
             .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("Read failed: {}", e)))?;
 
@@ -241,7 +245,6 @@ impl Seek for SftpFile {
             }
         };
 
-        // SFTP doesn't have explicit seek, we track position
         self.position = new_pos;
         Ok(new_pos)
     }
@@ -249,10 +252,7 @@ impl Seek for SftpFile {
 
 impl VfsFile for SftpFile {
     fn size(&self) -> io::Result<u64> {
-        // Refresh stat to get current size
-        let stat = self.handle.stat()
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("Stat failed: {}", e)))?;
-        Ok(stat.size.unwrap_or(0))
+        Ok(self.size)
     }
 
     fn sync(&mut self) -> io::Result<()> {
@@ -260,13 +260,11 @@ impl VfsFile for SftpFile {
     }
 
     fn read_at(&mut self, offset: u64, buf: &mut [u8]) -> io::Result<usize> {
-        // Seek to offset then read
         self.seek(SeekFrom::Start(offset))?;
         self.read(buf)
     }
 
     fn write_at(&mut self, offset: u64, buf: &[u8]) -> io::Result<usize> {
-        // Seek to offset then write
         self.seek(SeekFrom::Start(offset))?;
         self.write(buf)
     }

@@ -8,6 +8,7 @@ mod mark_engine;
 mod sak_format;
 mod modular;
 mod modules;
+mod vfs;
 
 use file_engine::{FileEngine, ChunkManager, EditableFileManager, EditOp, SearchEngine, SearchResult, FileInfo, CHUNK_SIZE};
 use mark_engine::{MarkEngine, MarkColor, Mark, MarkUpdate, MarkExport};

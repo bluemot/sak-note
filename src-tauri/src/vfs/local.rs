@@ -3,6 +3,7 @@
 //! Uses memory-mapped files for efficient large file handling.
 
 use super::{VfsBackend, VfsFile, VfsMetadata, VfsDirEntry};
+use std::os::unix::fs::PermissionsExt;
 use std::fs::{self, File, OpenOptions, DirEntry};
 use std::io::{self, Read, Write, Seek, SeekFrom};
 use std::path::Path;
