@@ -5,6 +5,7 @@
 pub mod file_module;
 pub mod marks_module;
 pub mod llm_module;
+pub mod sftp_module;
 
 /// Initialize and register all modules
 pub fn init() {
@@ -16,8 +17,8 @@ pub fn init() {
     // Register marks module
     marks_module::register();
     
-    // Register llm module
-    llm_module::register();
+    // Register sftp module
+    sftp_module::register();
     
     log::info!("Modules initialized");
 }
@@ -167,6 +168,62 @@ Ask questions about file content.
 Generate text from prompt.
 - Input: `{"prompt": "Write a README", "template": "doc"}`
 - Output: `{"generated": "...", "template_used": "doc"}`
+
+## SFTP Module (`sftp`)
+
+SSH/SFTP remote file access without OS-level mounting.
+
+### Capabilities
+
+#### `sftp.connect`
+Connect to SSH server.
+- Input: `{"connection_id": "server1", "hostname": "192.168.1.100", "port": 22, "username": "user", "password": "..."}`
+- Output: `{"success": true, "connection_id": "server1", "sftp_version": 3}`
+
+#### `sftp.disconnect`
+Close connection.
+- Input: `{"connection_id": "server1"}`
+- Output: `{"success": true}`
+
+#### `sftp.open`
+Open remote file.
+- Input: `{"connection_id": "server1", "remote_path": "/home/user/file.txt", "mode": "read"}`
+- Output: `{"file_handle": "server1:/home/user/file.txt", "size": 1234, "mode": "read"}`
+
+#### `sftp.read`
+Read bytes from position (with seek).
+- Input: `{"file_handle": "...", "offset": 0, "length": 1024}`
+- Output: `{"data": [72, 101, ...], "offset": 0, "bytes_read": 1024, "eof": false}`
+
+#### `sftp.read_text`
+Read text from position.
+- Input: `{"file_handle": "...", "offset": 0, "length": 1024}`
+- Output: `{"text": "Hello...", "offset": 0, "bytes_read": 5, "eof": false}`
+
+#### `sftp.write`
+Write bytes at position.
+- Input: `{"file_handle": "...", "offset": 100, "data": [65, 66, 67]}`
+- Output: `{"bytes_written": 3, "success": true}`
+
+#### `sftp.list_dir`
+List directory contents.
+- Input: `{"connection_id": "server1", "remote_path": "/home/user"}`
+- Output: `{"entries": [{"name": "file.txt", "is_file": true, "size": 1234}], "count": 1}`
+
+#### `sftp.stat`
+Get file info.
+- Input: `{"connection_id": "server1", "remote_path": "/home/user/file.txt"}`
+- Output: `{"exists": true, "is_file": true, "size": 1234, "modified": 1234567890}`
+
+#### `sftp.upload`
+Upload local file to remote.
+- Input: `{"connection_id": "server1", "local_path": "/local/file.txt", "remote_path": "/remote/file.txt"}`
+- Output: `{"success": true, "bytes_transferred": 1234}`
+
+#### `sftp.download`
+Download remote file to local.
+- Input: `{"connection_id": "server1", "remote_path": "/remote/file.txt", "local_path": "/local/file.txt"}`
+- Output: `{"success": true, "bytes_transferred": 1234}`
 
 ## Usage Example
 
