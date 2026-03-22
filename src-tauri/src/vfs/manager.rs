@@ -3,35 +3,33 @@
 //! Supports both local and remote (SFTP) backends.
 //! Backends can be registered for specific path patterns.
 
-use crate::vfs::{VfsBackend, VfsFile, VfsMetadata, EditJournal, EditOp};
+use crate::vfs::{VfsBackend, VfsMetadata, EditJournal, EditOp, Piece};
 use std::collections::HashMap;
-use std::io::{Read, Seek, SeekFrom};
 use std::sync::{Arc, RwLock};
+use std::io;
 
 /// VFS file handle with journaling
+#[derive(Clone)]
 pub struct VfsFileHandle {
-    backend: Box<dyn VfsBackend>,
+    backend: Arc<dyn VfsBackend>,
     path: String,
     journal: EditJournal,
-    is_dirty: bool,
 }
 
 impl VfsFileHandle {
-    pub fn new(backend: Box<dyn VfsBackend>, path: &str) -> Self {
+    pub fn new(backend: Arc<dyn VfsBackend>, path: &str) -> Self {
         VfsFileHandle {
             backend,
             path: path.to_string(),
             journal: EditJournal::new(),
-            is_dirty: false,
         }
     }
     
-    pub fn with_backend(backend: Box<dyn VfsBackend>, path: String) -> Self {
+    pub fn with_backend(backend: Arc<dyn VfsBackend>, path: String) -> Self {
         VfsFileHandle {
             backend,
             path,
             journal: EditJournal::new(),
-            is_dirty: false,
         }
     }
     
@@ -46,27 +44,54 @@ impl VfsFileHandle {
     
     /// Check if file has unsaved changes
     pub fn has_changes(&self) -> bool {
-        self.is_dirty || self.journal.has_edits()
+        self.journal.is_dirty()
     }
     
-    /// Read range of bytes
+    /// Read range of bytes (using piece table)
     pub fn read_range(&self, start: u64, length: usize) -> Vec<u8> {
-        let effective_size = self.effective_size();
-        if start >= effective_size {
-            return Vec::new();
-        }
+        let meta = match self.backend.metadata(&self.path) {
+            Ok(m) => m,
+            Err(_) => return Vec::new(),
+        };
         
-        let end = (start + length as u64).min(effective_size);
-        let length = (end - start) as usize;
+        let pieces = self.journal.build_piece_table(meta.size);
+        let mut result = Vec::with_capacity(length);
+        let mut current_pos = 0;
+        let target_end = start + length as u64;
         
-        if let Ok(mut file) = self.backend.open_read(&self.path) {
-            let mut buf = vec![0u8; length];
-            if let Ok(n) = file.read_at(start, &mut buf) {
-                buf.truncate(n);
-                return buf;
+        // Open file once for all Original pieces in this range
+        let mut file = match self.backend.open_read(&self.path) {
+            Ok(f) => f,
+            Err(_) => return Vec::new(),
+        };
+
+        for piece in pieces {
+            let piece_len = piece.length();
+            if current_pos + piece_len > start && current_pos < target_end {
+                let overlap_start = start.max(current_pos);
+                let overlap_end = target_end.min(current_pos + piece_len);
+                let overlap_len = overlap_end - overlap_start;
+                
+                let piece_offset = overlap_start - current_pos;
+                
+                match piece {
+                    Piece::Original { offset, .. } => {
+                        let mut buf = vec![0u8; overlap_len as usize];
+                        if file.read_at(offset + piece_offset, &mut buf).is_ok() {
+                            result.extend_from_slice(&buf);
+                        }
+                    }
+                    Piece::Added { data } => {
+                        let data_start = piece_offset as usize;
+                        let data_end = (piece_offset + overlap_len) as usize;
+                        result.extend_from_slice(&data[data_start..data_end]);
+                    }
+                }
             }
+            current_pos += piece_len;
+            if current_pos >= target_end { break; }
         }
-        Vec::new()
+        result
     }
     
     /// Read text (UTF-8)
@@ -76,9 +101,8 @@ impl VfsFileHandle {
     }
     
     /// Apply an edit operation
-    pub fn apply_edit(&mut self, op: EditOp) {
-        self.journal.add_edit(op);
-        self.is_dirty = true;
+    pub fn apply_edit(&mut self, op: EditOp) -> io::Result<()> {
+        self.journal.add_edit(op)
     }
     
     /// Undo last operation
@@ -102,18 +126,41 @@ impl VfsFileHandle {
     }
     
     /// Save changes to file
-    pub fn save(&mut self) -> std::io::Result<()> {
+    pub fn save(&mut self) -> io::Result<()> {
         if !self.has_changes() {
             return Ok(());
         }
-        // Apply journal edits to file
-        self.is_dirty = false;
+        
+        let meta = self.backend.metadata(&self.path)?;
+        let pieces = self.journal.build_piece_table(meta.size);
+        
+        let mut file = self.backend.open_write(&self.path)?;
+        let mut current_offset = 0;
+        
+        for piece in &pieces {
+            match piece {
+                Piece::Original { offset, length } => {
+                    let mut buf = vec![0u8; *length as usize];
+                    if let Ok(mut reader) = self.backend.open_read(&self.path) {
+                        reader.read_at(*offset, &mut buf)?;
+                        file.write_at(current_offset, &buf)?;
+                    }
+                }
+                Piece::Added { data } => {
+                    file.write_at(current_offset, data)?;
+                }
+            }
+            current_offset += piece.length();
+        }
+        
+        file.sync()?;
+        self.journal.set_dirty(false);
         self.journal.clear();
         Ok(())
     }
     
     /// Get file metadata
-    pub fn metadata(&self) -> std::io::Result<VfsMetadata> {
+    pub fn metadata(&self) -> io::Result<VfsMetadata> {
         self.backend.metadata(&self.path)
     }
     
@@ -126,6 +173,7 @@ impl VfsFileHandle {
 /// VFS Manager - manages file handles and backend registry
 pub struct VfsManager {
     handles: RwLock<HashMap<String, VfsFileHandle>>,
+    local_backend: Arc<dyn VfsBackend>,
 }
 
 lazy_static::lazy_static! {
@@ -136,6 +184,7 @@ impl VfsManager {
     pub fn new() -> Self {
         VfsManager {
             handles: RwLock::new(HashMap::new()),
+            local_backend: Arc::new(crate::vfs::local::LocalBackend::new()),
         }
     }
     
@@ -145,23 +194,31 @@ impl VfsManager {
     }
     
     /// Open a file with local backend
-    pub fn open_local(path: &str) -> std::io::Result<VfsFileHandle> {
-        let backend = Box::new(crate::vfs::local::LocalBackend::new());
-        let handle = VfsFileHandle::with_backend(backend, path.to_string());
+    pub fn open_local(path: &str) -> io::Result<VfsFileHandle> {
+        let manager = Self::global();
         
-        let mut handles = GLOBAL_MANAGER.handles.write()
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+        // Check if already open
+        {
+            let handles = manager.handles.read().map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+            if let Some(handle) = handles.get(path) {
+                return Ok(handle.clone());
+            }
+        }
+        
+        let handle = VfsFileHandle::with_backend(manager.local_backend.clone(), path.to_string());
+        
+        let mut handles = manager.handles.write().map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
         handles.insert(path.to_string(), handle.clone());
         
         Ok(handle)
     }
     
     /// Open a file with a specific backend
-    pub fn open_with_backend(backend: Box<dyn VfsBackend>, path: &str) -> std::io::Result<VfsFileHandle> {
+    pub fn open_with_backend(backend: Arc<dyn VfsBackend>, path: &str) -> io::Result<VfsFileHandle> {
+        let manager = Self::global();
         let handle = VfsFileHandle::with_backend(backend, path.to_string());
         
-        let mut handles = GLOBAL_MANAGER.handles.write()
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+        let mut handles = manager.handles.write().map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
         handles.insert(path.to_string(), handle.clone());
         
         Ok(handle)
@@ -169,23 +226,23 @@ impl VfsManager {
     
     /// Get a file handle
     pub fn get(path: &str) -> Option<VfsFileHandle> {
-        let handles = GLOBAL_MANAGER.handles.read().ok()?;
+        let manager = Self::global();
+        let handles = manager.handles.read().ok()?;
         handles.get(path).cloned()
     }
     
     /// Close a file
     pub fn close(path: &str) {
-        let mut handles = if let Ok(guard) = GLOBAL_MANAGER.handles.write() {
-            guard
-        } else {
-            return;
-        };
-        handles.remove(path);
+        let manager = Self::global();
+        if let Ok(mut handles) = manager.handles.write() {
+            handles.remove(path);
+        }
     }
     
     /// Check if file is open
     pub fn is_open(path: &str) -> bool {
-        if let Ok(handles) = GLOBAL_MANAGER.handles.read() {
+        let manager = Self::global();
+        if let Ok(handles) = manager.handles.read() {
             handles.contains_key(path)
         } else {
             false
@@ -194,32 +251,11 @@ impl VfsManager {
     
     /// List all open files
     pub fn list_open_files() -> Vec<String> {
-        if let Ok(handles) = GLOBAL_MANAGER.handles.read() {
+        let manager = Self::global();
+        if let Ok(handles) = manager.handles.read() {
             handles.keys().cloned().collect()
         } else {
             Vec::new()
-        }
-    }
-}
-
-impl Clone for VfsFileHandle {
-    fn clone(&self) -> Self {
-        // Create new handle with same backend type
-        // Note: This doesn't share journal state
-        let path = self.path.clone();
-        let backend: Box<dyn VfsBackend> = if self.path.contains('@') && self.path.contains(':') {
-            // Remote file - this would need SftpBackend
-            // For now, create empty
-            Box::new(crate::vfs::local::LocalBackend::new())
-        } else {
-            Box::new(crate::vfs::local::LocalBackend::new())
-        };
-        
-        VfsFileHandle {
-            backend,
-            path,
-            journal: EditJournal::new(),
-            is_dirty: false,
         }
     }
 }

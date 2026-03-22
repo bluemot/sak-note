@@ -1,37 +1,70 @@
 //! Local file system backend for VFS
 //! 
 //! Uses memory-mapped files for efficient large file handling.
+//! Caches mmaps and file handles for performance.
 
 use super::{VfsBackend, VfsFile, VfsMetadata, VfsDirEntry};
 use std::os::unix::fs::PermissionsExt;
-use std::fs::{self, File, OpenOptions, DirEntry};
+use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read, Write, Seek, SeekFrom};
 use std::path::Path;
+use std::sync::{Arc, RwLock};
+use std::collections::HashMap;
 use memmap2::{Mmap, MmapMut};
 
-/// Local file system backend
-pub struct LocalBackend;
+struct CachedMmap {
+    _file: File,
+    mmap: Arc<Mmap>,
+}
+
+/// Local file system backend with caching
+pub struct LocalBackend {
+    cache: RwLock<HashMap<String, Arc<Mmap>>>,
+}
 
 impl LocalBackend {
     pub fn new() -> Self {
-        LocalBackend
+        LocalBackend {
+            cache: RwLock::new(HashMap::new()),
+        }
+    }
+    
+    fn get_or_create_mmap(&self, path: &str) -> io::Result<Arc<Mmap>> {
+        {
+            let cache = self.cache.read().map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+            if let Some(mmap) = cache.get(path) {
+                return Ok(mmap.clone());
+            }
+        }
+        
+        let mut cache = self.cache.write().map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+        // Double check after acquiring write lock
+        if let Some(mmap) = cache.get(path) {
+            return Ok(mmap.clone());
+        }
+        
+        let file = File::open(path)?;
+        let mmap = Arc::new(unsafe { Mmap::map(&file)? });
+        cache.insert(path.to_string(), mmap.clone());
+        Ok(mmap)
     }
 }
 
 impl VfsBackend for LocalBackend {
     fn open_read(&self, path: &str) -> io::Result<Box<dyn VfsFile>> {
-        let file = OpenOptions::new().read(true).open(path)?;
-        let mmap = unsafe { Mmap::map(&file)? };
+        let mmap = self.get_or_create_mmap(path)?;
+        let size = mmap.len() as u64;
         
         Ok(Box::new(LocalFile {
             path: path.to_string(),
             mmap: Some(mmap),
             writable_mmap: None,
-            size: file.metadata()?.len(),
+            size,
         }))
     }
     
     fn open_write(&self, path: &str) -> io::Result<Box<dyn VfsFile>> {
+        // For writing, we don't necessarily use the read-only mmap cache
         let file = OpenOptions::new().read(true).write(true).open(path)?;
         let size = file.metadata()?.len();
         
@@ -94,10 +127,18 @@ impl VfsBackend for LocalBackend {
     }
     
     fn remove_file(&self, path: &str) -> io::Result<()> {
+        // Invalidate cache on remove
+        if let Ok(mut cache) = self.cache.write() {
+            cache.remove(path);
+        }
         fs::remove_file(path)
     }
     
     fn remove_dir(&self, path: &str) -> io::Result<()> {
+        // Invalidate cache for all files in directory
+        if let Ok(mut cache) = self.cache.write() {
+            cache.retain(|k, _| !k.starts_with(path));
+        }
         fs::remove_dir_all(path)
     }
 }
@@ -105,7 +146,7 @@ impl VfsBackend for LocalBackend {
 /// Local file implementation
 pub struct LocalFile {
     path: String,
-    mmap: Option<Mmap>,
+    mmap: Option<Arc<Mmap>>,
     writable_mmap: Option<MmapMut>,
     size: u64,
 }
@@ -158,9 +199,8 @@ impl Write for LocalFile {
 }
 
 impl Seek for LocalFile {
-    fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
-        // Memory-mapped files don't need explicit seek
-        // We handle offset in read_at/write_at
+    fn seek(&mut self, _pos: SeekFrom) -> io::Result<u64> {
+        // Memory-mapped files handle offset in read_at/write_at
         Ok(0)
     }
 }
@@ -177,7 +217,10 @@ impl VfsFile for LocalFile {
     fn read_at(&mut self, offset: u64, buf: &mut [u8]) -> io::Result<usize> {
         if let Some(ref mmap) = self.mmap {
             let offset = offset as usize;
-            let available = mmap.len().saturating_sub(offset);
+            if offset >= mmap.len() {
+                return Ok(0);
+            }
+            let available = mmap.len() - offset;
             let to_read = buf.len().min(available);
             
             if to_read > 0 {
@@ -186,7 +229,19 @@ impl VfsFile for LocalFile {
             
             Ok(to_read)
         } else {
-            Err(io::Error::new(io::ErrorKind::Other, "File not open for reading"))
+            // Fallback: if not mapped for reading, try to map it
+            let file = File::open(&self.path)?;
+            let mmap = unsafe { Mmap::map(&file)? };
+            let offset = offset as usize;
+            if offset >= mmap.len() {
+                return Ok(0);
+            }
+            let available = mmap.len() - offset;
+            let to_read = buf.len().min(available);
+            if to_read > 0 {
+                buf[..to_read].copy_from_slice(&mmap[offset..offset + to_read]);
+            }
+            Ok(to_read)
         }
     }
     
@@ -195,7 +250,11 @@ impl VfsFile for LocalFile {
         
         if let Some(ref mut mmap) = self.writable_mmap {
             let offset = offset as usize;
-            let available = mmap.len().saturating_sub(offset);
+            if offset >= mmap.len() {
+                // In a real VFS we might want to grow the file here
+                return Err(io::Error::new(io::ErrorKind::Other, "Write beyond mmap boundary"));
+            }
+            let available = mmap.len() - offset;
             let to_write = buf.len().min(available);
             
             if to_write > 0 {
@@ -211,7 +270,6 @@ impl VfsFile for LocalFile {
 
 impl Drop for LocalFile {
     fn drop(&mut self) {
-        // Flush on drop if writable
         if self.writable_mmap.is_some() {
             let _ = self.flush();
         }

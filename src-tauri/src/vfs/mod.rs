@@ -10,7 +10,7 @@
 //! - Efficient seeking without loading entire file
 
 use std::io::{self, Read, Write, Seek, SeekFrom};
-use std::path::Path;
+use std::sync::{Arc, RwLock};
 
 /// VFS backend trait - implemented by local and remote file systems
 pub trait VfsBackend: Send + Sync {
@@ -74,94 +74,6 @@ pub struct VfsDirEntry {
     pub metadata: VfsMetadata,
 }
 
-/// VFS handle - combines backend with journaling
-pub struct VfsHandle {
-    backend: Box<dyn VfsBackend>,
-    path: String,
-    journal: EditJournal,
-}
-
-impl VfsHandle {
-    pub fn new(backend: Box<dyn VfsBackend>, path: &str) -> Self {
-        VfsHandle {
-            backend,
-            path: path.to_string(),
-            journal: EditJournal::new(),
-        }
-    }
-    
-    /// Read range of bytes (applies journal on-the-fly)
-    pub fn read_range(&self, start: u64, length: usize) -> io::Result<Vec<u8>> {
-        // Apply journal edits to determine logical view
-        let effective_size = self.journal.effective_size(self.backend_size()?);
-        
-        if start >= effective_size {
-            return Ok(Vec::new());
-        }
-        
-        let end = (start + length as u64).min(effective_size);
-        let length = (end - start) as usize;
-        
-        // Read from backend with journal overlay
-        let mut file = self.backend.open_read(&self.path)?;
-        let mut result = vec![0u8; length];
-        
-        // Build logical to physical mapping
-        let physical_offset = self.journal.logical_to_physical(start);
-        file.seek(SeekFrom::Start(physical_offset))?;
-        file.read_exact(&mut result)?;
-        
-        // Apply any pending edits in this range
-        self.journal.apply_edits_to_buffer(start, &mut result);
-        
-        Ok(result)
-    }
-    
-    /// Write operation (adds to journal)
-    pub fn write(&mut self, offset: u64, data: &[u8]) {
-        self.journal.add_edit(EditOp::Write { offset, data: data.to_vec() });
-    }
-    
-    /// Insert operation (adds to journal)
-    pub fn insert(&mut self, offset: u64, data: &[u8]) {
-        self.journal.add_edit(EditOp::Insert { offset, data: data.to_vec() });
-    }
-    
-    /// Delete operation (adds to journal)
-    pub fn delete(&mut self, offset: u64, length: u64) {
-        self.journal.add_edit(EditOp::Delete { offset, length });
-    }
-    
-    /// Save changes to backend
-    pub fn save(&mut self) -> io::Result<()> {
-        // Apply all journal edits to actual file
-        let mut file = self.backend.open_write(&self.path)?;
-        self.journal.flush_to(&mut *file)?;
-        self.journal.clear();
-        file.sync()
-    }
-    
-    /// Undo last operation
-    pub fn undo(&mut self) -> bool {
-        self.journal.undo()
-    }
-    
-    /// Redo last undone operation
-    pub fn redo(&mut self) -> bool {
-        self.journal.redo()
-    }
-    
-    /// Get effective file size
-    pub fn size(&self) -> io::Result<u64> {
-        let backend_size = self.backend_size()?;
-        Ok(self.journal.effective_size(backend_size))
-    }
-    
-    fn backend_size(&self) -> io::Result<u64> {
-        self.backend.metadata(&self.path).map(|m| m.size)
-    }
-}
-
 /// Edit operations for journaling
 #[derive(Debug, Clone)]
 pub enum EditOp {
@@ -170,91 +82,232 @@ pub enum EditOp {
     Delete { offset: u64, length: u64 },
 }
 
-/// Journal for tracking edits
+/// Piece table entry
+#[derive(Debug, Clone)]
+pub enum Piece {
+    Original { offset: u64, length: u64 },
+    Added { data: Vec<u8> },
+}
+
+impl Piece {
+    pub fn length(&self) -> u64 {
+        match self {
+            Piece::Original { length, .. } => *length,
+            Piece::Added { data } => data.len() as u64,
+        }
+    }
+}
+
 #[derive(Debug, Default)]
-pub struct EditJournal {
+struct EditJournalState {
     history: Vec<EditOp>,
     position: usize,
+    is_dirty: bool,
+}
+
+/// Journal for tracking edits with piece table support
+#[derive(Debug, Clone)]
+pub struct EditJournal {
+    state: Arc<RwLock<EditJournalState>>,
 }
 
 impl EditJournal {
     pub fn new() -> Self {
         EditJournal {
-            history: Vec::new(),
-            position: 0,
+            state: Arc::new(RwLock::new(EditJournalState::default())),
         }
     }
     
-    pub fn add_edit(&mut self, op: EditOp) {
-        // Remove redo history
-        if self.position < self.history.len() {
-            self.history.truncate(self.position);
+    pub fn add_edit(&self, op: EditOp) -> io::Result<()> {
+        let mut state = self.state.write().map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+        let pos = state.position;
+        if pos < state.history.len() {
+            state.history.truncate(pos);
         }
-        self.history.push(op);
-        self.position += 1;
-    }
-    
-    pub fn undo(&mut self) -> bool {
-        if self.position > 0 {
-            self.position -= 1;
-            true
-        } else {
-            false
-        }
-    }
-    
-    pub fn redo(&mut self) -> bool {
-        if self.position < self.history.len() {
-            self.position += 1;
-            true
-        } else {
-            false
-        }
-    }
-    
-    pub fn effective_size(&self, base_size: u64) -> u64 {
-        let mut size = base_size as i64;
-        for op in &self.history[..self.position] {
-            match op {
-                EditOp::Insert { data, .. } => size += data.len() as i64,
-                EditOp::Delete { length, .. } => size -= *length as i64,
-                EditOp::Write { .. } => {} // Write doesn't change size
-            }
-        }
-        size.max(0) as u64
-    }
-    
-    pub fn logical_to_physical(&self, logical_offset: u64) -> u64 {
-        // Simplified mapping - full implementation tracks all edits
-        logical_offset
-    }
-    
-    pub fn apply_edits_to_buffer(&self, _start_offset: u64, _buffer: &mut [u8]) {
-        // Apply pending edits to read buffer
-        // Full implementation would overlay edits on top of base data
-    }
-    
-    pub fn flush_to(&self, _file: &mut dyn VfsFile) -> io::Result<()> {
-        // Apply all edits to actual file
-        // Write to temp file, then atomic rename
+        state.history.push(op);
+        state.position += 1;
+        state.is_dirty = true;
         Ok(())
     }
+
+    pub fn set_dirty(&self, dirty: bool) {
+        if let Ok(mut state) = self.state.write() {
+            state.is_dirty = dirty;
+        }
+    }
+
+    pub fn is_dirty(&self) -> bool {
+        self.state.read().map(|s| s.is_dirty || !s.history.is_empty()).unwrap_or(false)
+    }
     
-    pub fn clear(&mut self) {
-        self.history.clear();
-        self.position = 0;
+    pub fn undo(&self) -> bool {
+        if let Ok(mut state) = self.state.write() {
+            if state.position > 0 {
+                state.position -= 1;
+                return true;
+            }
+        }
+        false
+    }
+    
+    pub fn redo(&self) -> bool {
+        if let Ok(mut state) = self.state.write() {
+            if state.position < state.history.len() {
+                state.position += 1;
+                return true;
+            }
+        }
+        false
+    }
+    
+    /// Build piece table from history
+    pub fn build_piece_table(&self, base_size: u64) -> Vec<Piece> {
+        let state = match self.state.read() {
+            Ok(s) => s,
+            Err(_) => return vec![Piece::Original { offset: 0, length: base_size }],
+        };
+        
+        let mut pieces = vec![Piece::Original { offset: 0, length: base_size }];
+        
+        for op in &state.history[..state.position] {
+            match op {
+                EditOp::Insert { offset, data } => {
+                    self.insert_into_pieces(&mut pieces, *offset, data.clone());
+                }
+                EditOp::Delete { offset, length } => {
+                    self.delete_from_pieces(&mut pieces, *offset, *length);
+                }
+                EditOp::Write { offset, data } => {
+                    // Write is delete then insert
+                    self.delete_from_pieces(&mut pieces, *offset, data.len() as u64);
+                    self.insert_into_pieces(&mut pieces, *offset, data.clone());
+                }
+            }
+        }
+        pieces
+    }
+    
+    fn insert_into_pieces(&self, pieces: &mut Vec<Piece>, offset: u64, data: Vec<u8>) {
+        let mut current_pos = 0;
+        let mut i = 0;
+        while i < pieces.len() {
+            let piece_len = pieces[i].length();
+            if current_pos <= offset && offset < current_pos + piece_len {
+                // Split piece i
+                let split_off = offset - current_pos;
+                let left_piece = match &pieces[i] {
+                    Piece::Original { offset: o, .. } => Piece::Original { offset: *o, length: split_off },
+                    Piece::Added { data: d } => Piece::Added { data: d[..split_off as usize].to_vec() },
+                };
+                let right_piece = match &pieces[i] {
+                    Piece::Original { offset: o, length: l } => Piece::Original { offset: o + split_off, length: l - split_off },
+                    Piece::Added { data: d } => Piece::Added { data: d[split_off as usize..].to_vec() },
+                };
+                
+                pieces.remove(i);
+                if right_piece.length() > 0 {
+                    pieces.insert(i, right_piece);
+                }
+                pieces.insert(i, Piece::Added { data });
+                if left_piece.length() > 0 {
+                    pieces.insert(i, left_piece);
+                }
+                return;
+            }
+            current_pos += piece_len;
+            i += 1;
+        }
+        // If offset is at the very end
+        if offset == current_pos {
+            pieces.push(Piece::Added { data });
+        }
+    }
+    
+    fn delete_from_pieces(&self, pieces: &mut Vec<Piece>, offset: u64, length: u64) {
+        let mut current_pos = 0;
+        let mut i = 0;
+        let mut remaining_to_delete = length;
+        
+        while i < pieces.len() && remaining_to_delete > 0 {
+            let piece_len = pieces[i].length();
+            if current_pos + piece_len > offset {
+                let overlap_start = offset.max(current_pos);
+                let overlap_end = (offset + remaining_to_delete).min(current_pos + piece_len);
+                let overlap_len = overlap_end - overlap_start;
+                
+                if overlap_len > 0 {
+                    // Split or remove piece
+                    let split_start = overlap_start - current_pos;
+                    let split_end = overlap_end - current_pos;
+                    
+                    let piece = pieces.remove(i);
+                    let mut replacements = Vec::new();
+                    
+                    if split_start > 0 {
+                        replacements.push(match &piece {
+                            Piece::Original { offset: o, .. } => Piece::Original { offset: *o, length: split_start },
+                            Piece::Added { data: d } => Piece::Added { data: d[..split_start as usize].to_vec() },
+                        });
+                    }
+                    
+                    if split_end < piece_len {
+                        replacements.push(match &piece {
+                            Piece::Original { offset: o, length: l } => Piece::Original { offset: o + split_end, length: l - split_end },
+                            Piece::Added { data: d } => Piece::Added { data: d[split_end as usize..].to_vec() },
+                        });
+                    }
+                    
+                    for (idx, r) in replacements.into_iter().enumerate() {
+                        pieces.insert(i + idx, r);
+                    }
+                    
+                    remaining_to_delete -= overlap_len;
+                    // If we removed/split pieces, don't increment i yet as the new piece at i might also overlap
+                    continue;
+                }
+            }
+            current_pos += piece_len;
+            i += 1;
+        }
+    }
+
+    pub fn effective_size(&self, base_size: u64) -> u64 {
+        self.build_piece_table(base_size).iter().map(|p| p.length()).sum()
+    }
+    
+    pub fn logical_to_physical(&self, logical_offset: u64, base_size: u64) -> Option<u64> {
+        let pieces = self.build_piece_table(base_size);
+        let mut current_pos = 0;
+        for piece in pieces {
+            let piece_len = piece.length();
+            if logical_offset >= current_pos && logical_offset < current_pos + piece_len {
+                match piece {
+                    Piece::Original { offset, .. } => return Some(offset + (logical_offset - current_pos)),
+                    Piece::Added { .. } => return None, // Not in physical file
+                }
+            }
+            current_pos += piece_len;
+        }
+        None
+    }
+    
+    pub fn clear(&self) {
+        if let Ok(mut state) = self.state.write() {
+            state.history.clear();
+            state.position = 0;
+        }
     }
     
     pub fn can_undo(&self) -> bool {
-        self.position > 0
+        self.state.read().map(|s| s.position > 0).unwrap_or(false)
     }
     
     pub fn can_redo(&self) -> bool {
-        self.position < self.history.len()
+        self.state.read().map(|s| s.position < s.history.len()).unwrap_or(false)
     }
     
     pub fn has_edits(&self) -> bool {
-        !self.history.is_empty()
+        self.state.read().map(|s| !s.history.is_empty()).unwrap_or(false)
     }
 }
 

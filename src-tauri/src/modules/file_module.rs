@@ -11,19 +11,16 @@
 //! - file.delete: Delete bytes
 //! - file.replace: Replace bytes
 //! - file.save: Save changes
-//! - file.save_as: Save to new file
 //! - file.undo: Undo last operation
 //! - file.redo: Redo last undone operation
 //! - file.get_info: Get file information
 //! - file.get_hex: Get hex view
 
 use crate::modular::{Module, ModuleInfo, Capability, ModuleError};
-use crate::vfs::manager::{VfsManager, VfsFileHandle};
+use crate::vfs::manager::VfsManager;
 use crate::vfs::EditOp;
-use serde::{Serialize, Deserialize};
+use serde::Serialize;
 use serde_json::Value;
-use std::collections::HashMap;
-use std::sync::Mutex;
 
 /// File info response
 #[derive(Debug, Serialize)]
@@ -36,16 +33,12 @@ struct FileInfoResponse {
     can_redo: bool,
 }
 
-/// File module implementation using VfsManager
-pub struct FileModule {
-    handles: Mutex<HashMap<String, VfsFileHandle>>,
-}
+/// File module implementation using VfsManager only
+pub struct FileModule;
 
 impl FileModule {
     pub fn new() -> Self {
-        FileModule {
-            handles: Mutex::new(HashMap::new()),
-        }
+        FileModule
     }
     
     fn capability_schemas() -> Vec<Capability> {
@@ -276,8 +269,8 @@ impl Module for FileModule {
     fn info(&self) -> ModuleInfo {
         ModuleInfo {
             name: "file".to_string(),
-            version: "2.0.0".to_string(),
-            description: "Large file handling via VFS (local/SFTP)".to_string(),
+            version: "2.1.0".to_string(),
+            description: "Large file handling via VFS (local/SFTP) - Optimized".to_string(),
             capabilities: Self::capability_schemas(),
         }
     }
@@ -301,11 +294,11 @@ impl Module for FileModule {
     }
     
     fn get_state(&self) -> Value {
-        let handles = self.handles.lock().unwrap();
+        let open_files = VfsManager::list_open_files();
         serde_json::json!({
-            "type": "file_module_v2",
-            "open_files": handles.len(),
-            "files": handles.keys().collect::<Vec<_>>()
+            "type": "file_module_v2_optimized",
+            "open_files": open_files.len(),
+            "files": open_files
         })
     }
     
@@ -315,22 +308,13 @@ impl Module for FileModule {
 }
 
 impl FileModule {
-    fn get_handle(&self, path: &str) -> Result<std::sync::MutexGuard<'_, HashMap<String, VfsFileHandle>>, ModuleError> {
-        self.handles.lock().map_err(|e| ModuleError::new("lock_error", &e.to_string()))
-    }
-    
     fn cmd_open(&self, input: Value) -> Result<Value, ModuleError> {
         let path = input["path"].as_str()
             .ok_or_else(|| ModuleError::new("invalid_input", "Missing 'path'"))?;
         
-        // Open via VfsManager
+        // Open via VfsManager (handles global tracking)
         let handle = VfsManager::open_local(path)
             .map_err(|e| ModuleError::new("open_error", &e.to_string()))?;
-        
-        let mut handles = self.get_handle(path)?;
-        handles.insert(path.to_string(), handle);
-        
-        let handle = handles.get(path).unwrap();
         
         Ok(serde_json::json!({
             "path": path,
@@ -344,8 +328,6 @@ impl FileModule {
         let path = input["path"].as_str()
             .ok_or_else(|| ModuleError::new("invalid_input", "Missing 'path'"))?;
         
-        let mut handles = self.get_handle(path)?;
-        handles.remove(path);
         VfsManager::close(path);
         
         Ok(serde_json::Value::Null)
@@ -357,8 +339,7 @@ impl FileModule {
         let offset = input["offset"].as_u64().unwrap_or(0);
         let length = input["length"].as_u64().unwrap_or(1024) as usize;
         
-        let mut handles = self.get_handle(path)?;
-        let handle = handles.get_mut(path)
+        let handle = VfsManager::get(path)
             .ok_or_else(|| ModuleError::new("not_open", "File not open"))?;
         
         let data = handle.read_range(offset, length);
@@ -376,8 +357,7 @@ impl FileModule {
         let offset = input["offset"].as_u64().unwrap_or(0);
         let length = input["length"].as_u64().unwrap_or(1024) as usize;
         
-        let mut handles = self.get_handle(path)?;
-        let handle = handles.get_mut(path)
+        let handle = VfsManager::get(path)
             .ok_or_else(|| ModuleError::new("not_open", "File not open"))?;
         
         let text = handle.read_text(offset, length);
@@ -399,11 +379,11 @@ impl FileModule {
             .filter_map(|v| v.as_u64().map(|n| n as u8))
             .collect();
         
-        let mut handles = self.get_handle(path)?;
-        let handle = handles.get_mut(path)
+        let mut handle = VfsManager::get(path)
             .ok_or_else(|| ModuleError::new("not_open", "File not open"))?;
         
-        handle.apply_edit(EditOp::Insert { offset, data });
+        handle.apply_edit(EditOp::Insert { offset, data })
+            .map_err(|e| ModuleError::new("edit_error", &e.to_string()))?;
         
         Ok(serde_json::json!({"success": true}))
     }
@@ -414,11 +394,11 @@ impl FileModule {
         let offset = input["offset"].as_u64().unwrap_or(0);
         let length = input["length"].as_u64().unwrap_or(1);
         
-        let mut handles = self.get_handle(path)?;
-        let handle = handles.get_mut(path)
+        let mut handle = VfsManager::get(path)
             .ok_or_else(|| ModuleError::new("not_open", "File not open"))?;
         
-        handle.apply_edit(EditOp::Delete { offset, length });
+        handle.apply_edit(EditOp::Delete { offset, length })
+            .map_err(|e| ModuleError::new("edit_error", &e.to_string()))?;
         
         Ok(serde_json::json!({"success": true}))
     }
@@ -434,15 +414,16 @@ impl FileModule {
             .filter_map(|v| v.as_u64().map(|n| n as u8))
             .collect();
         
-        let mut handles = self.get_handle(path)?;
-        let handle = handles.get_mut(path)
+        let mut handle = VfsManager::get(path)
             .ok_or_else(|| ModuleError::new("not_open", "File not open"))?;
         
         // Replace = delete then insert
         if length > 0 {
-            handle.apply_edit(EditOp::Delete { offset, length });
+            handle.apply_edit(EditOp::Delete { offset, length })
+                .map_err(|e| ModuleError::new("edit_error", &e.to_string()))?;
         }
-        handle.apply_edit(EditOp::Insert { offset, data });
+        handle.apply_edit(EditOp::Insert { offset, data })
+            .map_err(|e| ModuleError::new("edit_error", &e.to_string()))?;
         
         Ok(serde_json::json!({"success": true}))
     }
@@ -451,8 +432,7 @@ impl FileModule {
         let path = input["path"].as_str()
             .ok_or_else(|| ModuleError::new("invalid_input", "Missing 'path'"))?;
         
-        let mut handles = self.get_handle(path)?;
-        let handle = handles.get_mut(path)
+        let mut handle = VfsManager::get(path)
             .ok_or_else(|| ModuleError::new("not_open", "File not open"))?;
         
         handle.save()
@@ -465,8 +445,7 @@ impl FileModule {
         let path = input["path"].as_str()
             .ok_or_else(|| ModuleError::new("invalid_input", "Missing 'path'"))?;
         
-        let mut handles = self.get_handle(path)?;
-        let handle = handles.get_mut(path)
+        let mut handle = VfsManager::get(path)
             .ok_or_else(|| ModuleError::new("not_open", "File not open"))?;
         
         let success = handle.undo();
@@ -482,8 +461,7 @@ impl FileModule {
         let path = input["path"].as_str()
             .ok_or_else(|| ModuleError::new("invalid_input", "Missing 'path'"))?;
         
-        let mut handles = self.get_handle(path)?;
-        let handle = handles.get_mut(path)
+        let mut handle = VfsManager::get(path)
             .ok_or_else(|| ModuleError::new("not_open", "File not open"))?;
         
         let success = handle.redo();
@@ -499,8 +477,7 @@ impl FileModule {
         let path = input["path"].as_str()
             .ok_or_else(|| ModuleError::new("invalid_input", "Missing 'path'"))?;
         
-        let mut handles = self.get_handle(path)?;
-        let handle = handles.get_mut(path)
+        let handle = VfsManager::get(path)
             .ok_or_else(|| ModuleError::new("not_open", "File not open"))?;
         
         let size = handle.metadata().map(|m| m.size).unwrap_or(0);
@@ -521,8 +498,7 @@ impl FileModule {
         let offset = input["offset"].as_u64().unwrap_or(0);
         let length = input["length"].as_u64().unwrap_or(256) as usize;
         
-        let mut handles = self.get_handle(path)?;
-        let handle = handles.get_mut(path)
+        let handle = VfsManager::get(path)
             .ok_or_else(|| ModuleError::new("not_open", "File not open"))?;
         
         let data = handle.read_range(offset, length);
