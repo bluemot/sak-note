@@ -252,10 +252,17 @@ impl EditJournal {
     pub fn can_redo(&self) -> bool {
         self.position < self.history.len()
     }
+    
+    pub fn has_edits(&self) -> bool {
+        !self.history.is_empty()
+    }
 }
 
 /// Local file system backend
 pub mod local;
 
-/// SFTP backend  
+/// Remote file system backend (SFTP)
 pub mod remote;
+
+/// VFS Manager for unified access
+pub mod manager;
