@@ -54,6 +54,12 @@ pub struct ModuleError {
     pub details: Option<Value>,
 }
 
+impl std::fmt::Display for ModuleError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}: {}", self.code, self.message)
+    }
+}
+
 impl ModuleError {
     pub fn new(code: &str, message: &str) -> Self {
         ModuleError {
@@ -158,6 +164,11 @@ pub fn process_request(request: ModuleRequest) -> ModuleResponse {
         Ok(result) => ModuleResponse::success(result, request.id),
         Err(e) => ModuleResponse::error(e, request.id),
     }
+}
+
+/// Execute a module capability (public API)
+pub fn execute_module(module: &str, capability: &str, input: Value) -> Result<Value, ModuleError> {
+    ModuleRegistry::execute(module, capability, input)
 }
 
 /// Helper macro to define module capabilities

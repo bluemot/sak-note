@@ -544,6 +544,17 @@ fn current_timestamp() -> u64 {
         .as_secs()
 }
 
+/// Execute a module capability
+#[tauri::command]
+async fn execute_module(
+    module: String,
+    capability: String,
+    input: serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    modular::execute_module(&module, &capability, input)
+        .map_err(|e| e.to_string())
+}
+
 pub fn run() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
@@ -577,7 +588,9 @@ pub fn run() {
             clear_marks,
             delete_marks_by_color,
             get_mark_count,
-            export_marks
+            export_marks,
+            // Module execution
+            execute_module
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
