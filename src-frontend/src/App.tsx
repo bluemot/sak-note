@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react'
-import { open, save } from '@tauri-apps/api/dialog'
+import { open } from '@tauri-apps/api/dialog'
 import { invoke } from '@tauri-apps/api/tauri'
 import Editor from './components/Editor'
 import HexViewer from './components/HexViewer'

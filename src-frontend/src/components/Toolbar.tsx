@@ -1,5 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
-import { invoke } from '@tauri-apps/api/tauri'
+import { useState, useCallback } from 'react'
 import './Toolbar.css'
 
 interface ToolbarProps {

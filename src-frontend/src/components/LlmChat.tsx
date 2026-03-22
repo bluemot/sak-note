@@ -41,7 +41,7 @@ export default function LlmChat({ filePath }: LlmChatProps) {
   
   const checkConnection = async () => {
     try {
-      const result = await invoke<{ models: Array<{ name: string }> }>('execute_module', {
+      await invoke<{ models: Array<{ name: string }> }>('execute_module', {
         module: 'llm',
         capability: 'list_models',
         input: { api_url: 'https://ollama.com' }

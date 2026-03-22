@@ -13,7 +13,7 @@ const CHUNK_SIZE = 64 * 1024 // 64KB chunks
 function FileEditor({ filePath, fileSize }: EditorProps) {
   const [content, setContent] = useState('')
   const [isLoading, setIsLoading] = useState(true)
-  const [chunkRange, setChunkRange] = useState({ start: 0, end: Math.min(CHUNK_SIZE * 2, fileSize) })
+  const [chunkRange, _setChunkRange] = useState({ start: 0, end: Math.min(CHUNK_SIZE * 2, fileSize) })
   const editorRef = useRef<any>(null)
 
   // Load initial chunks
@@ -58,11 +58,6 @@ function FileEditor({ filePath, fileSize }: EditorProps) {
 
     // Virtual scrolling for large files
     editor.onDidScrollChange(() => {
-      const scrollTop = editor.getScrollTop()
-      const lineHeight = editor.getOption(59) // lineHeight
-      const visibleLines = Math.ceil(editor.getLayoutInfo().height / lineHeight)
-      const currentLine = Math.floor(scrollTop / lineHeight)
-      
       // TODO: Implement virtual scrolling to load chunks on demand
       // This is a placeholder for the actual implementation
     })
