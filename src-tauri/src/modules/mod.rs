@@ -4,6 +4,7 @@
 
 pub mod file_module;
 pub mod marks_module;
+pub mod llm_module;
 
 /// Initialize and register all modules
 pub fn init() {
@@ -14,6 +15,9 @@ pub fn init() {
     
     // Register marks module
     marks_module::register();
+    
+    // Register llm module
+    llm_module::register();
     
     log::info!("Modules initialized");
 }
@@ -154,10 +158,15 @@ Import marks from JSON.
 - Input: `{"path": "...", "data": {"marks": [...]}}`
 - Output: `{"success": true, "imported_count": 10}`
 
-#### `marks.get_colors`
-Get available colors.
-- Input: `{}`
-- Output: `{"colors": [{"name": "red", "hex": "#ff6b6b"}, ...]}`
+#### `llm.ask_about_file`
+Ask questions about file content.
+- Input: `{"file_path": "...", "question": "What does this function do?", "context_id": "..."}`
+- Output: `{"response": "...", "relevant_sections": ["lines 10-20"]}`
+
+#### `llm.generate`
+Generate text from prompt.
+- Input: `{"prompt": "Write a README", "template": "doc"}`
+- Output: `{"generated": "...", "template_used": "doc"}`
 
 ## Usage Example
 
