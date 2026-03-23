@@ -261,6 +261,56 @@ impl FileModule {
                     }
                 }),
             },
+            Capability {
+                name: "read_dir".to_string(),
+                description: "List directory contents".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "path": {"type": "string", "description": "Directory path"}
+                    },
+                    "required": ["path"]
+                }),
+                output_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "entries": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "name": {"type": "string"},
+                                    "path": {"type": "string"},
+                                    "is_file": {"type": "boolean"},
+                                    "is_dir": {"type": "boolean"},
+                                    "size": {"type": "integer"}
+                                }
+                            }
+                        },
+                        "count": {"type": "integer"}
+                    }
+                }),
+            },
+            Capability {
+                name: "stat".to_string(),
+                description: "Get file or directory information".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "path": {"type": "string"}
+                    },
+                    "required": ["path"]
+                }),
+                output_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "exists": {"type": "boolean"},
+                        "size": {"type": "integer"},
+                        "is_file": {"type": "boolean"},
+                        "is_dir": {"type": "boolean"}
+                    }
+                }),
+            },
         ]
     }
 }
@@ -289,6 +339,8 @@ impl Module for FileModule {
             "redo" => self.cmd_redo(input),
             "get_info" => self.cmd_get_info(input),
             "get_hex" => self.cmd_get_hex(input),
+            "read_dir" => self.cmd_read_dir(input),
+            "stat" => self.cmd_stat(input),
             _ => Err(ModuleError::new("unknown_capability", &format!("Unknown: {}", capability))),
         }
     }
@@ -532,6 +584,50 @@ impl FileModule {
             .collect();
         
         Ok(serde_json::json!({"rows": rows}))
+    }
+    
+    fn cmd_read_dir(&self, input: Value) -> Result<Value, ModuleError> {
+        let path = input["path"].as_str()
+            .ok_or_else(|| ModuleError::new("invalid_input", "Missing 'path'"))?;
+        
+        let entries = VfsManager::read_dir(path)
+            .map_err(|e| ModuleError::new("read_dir_error", &e.to_string()))?;
+        
+        let entries_json: Vec<serde_json::Value> = entries
+            .into_iter()
+            .map(|e| serde_json::json!({
+                "name": e.name,
+                "path": e.path,
+                "is_file": e.metadata.is_file,
+                "is_dir": e.metadata.is_dir,
+                "size": e.metadata.size
+            }))
+            .collect();
+        
+        Ok(serde_json::json!({
+            "entries": entries_json,
+            "count": entries_json.len()
+        }))
+    }
+    
+    fn cmd_stat(&self, input: Value) -> Result<Value, ModuleError> {
+        let path = input["path"].as_str()
+            .ok_or_else(|| ModuleError::new("invalid_input", "Missing 'path'"))?;
+        
+        match VfsManager::stat(path) {
+            Ok(meta) => Ok(serde_json::json!({
+                "exists": true,
+                "size": meta.size,
+                "is_file": meta.is_file,
+                "is_dir": meta.is_dir
+            })),
+            Err(_) => Ok(serde_json::json!({
+                "exists": false,
+                "size": 0,
+                "is_file": false,
+                "is_dir": false
+            }))
+        }
     }
 }
 

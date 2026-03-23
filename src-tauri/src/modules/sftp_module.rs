@@ -450,38 +450,35 @@ impl SftpModule {
     }
     
     fn cmd_list_dir(&self, input: Value) -> Result<Value, ModuleError> {
-        let connection_id = input["connection_id"].as_str()
+        let _connection_id = input["connection_id"].as_str()
             .ok_or_else(|| ModuleError::new("invalid_input", "Missing 'connection_id'"))?;
         let remote_path = input["remote_path"].as_str()
             .ok_or_else(|| ModuleError::new("invalid_input", "Missing 'remote_path'"))?;
         
-        // For now, use local backend
-        let backend = Box::new(crate::vfs::local::LocalBackend::new());
+        // Use VfsManager for unified access
+        let entries = VfsManager::read_dir(remote_path)
+            .map_err(|e| ModuleError::new("list_error", &e.to_string()))?;
         
-        match backend.read_dir(remote_path) {
-            Ok(entries) => Ok(serde_json::json!({
-                "entries": entries.iter().map(|e| serde_json::json!({
-                    "name": e.name,
-                    "path": e.path,
-                    "is_file": e.metadata.is_file,
-                    "is_dir": e.metadata.is_dir,
-                    "size": e.metadata.size
-                })).collect::<Vec<_>>(),
-                "count": entries.len()
-            })),
-            Err(e) => Err(ModuleError::new("list_error", &e.to_string()))
-        }
+        Ok(serde_json::json!({
+            "entries": entries.iter().map(|e| serde_json::json!({
+                "name": e.name,
+                "path": e.path,
+                "is_file": e.metadata.is_file,
+                "is_dir": e.metadata.is_dir,
+                "size": e.metadata.size
+            })).collect::<Vec<_>>(),
+            "count": entries.len()
+        }))
     }
     
     fn cmd_stat(&self, input: Value) -> Result<Value, ModuleError> {
-        let connection_id = input["connection_id"].as_str()
+        let _connection_id = input["connection_id"].as_str()
             .ok_or_else(|| ModuleError::new("invalid_input", "Missing 'connection_id'"))?;
         let remote_path = input["remote_path"].as_str()
             .ok_or_else(|| ModuleError::new("invalid_input", "Missing 'remote_path'"))?;
         
-        let backend = Box::new(crate::vfs::local::LocalBackend::new());
-        
-        match backend.metadata(remote_path) {
+        // Use VfsManager for unified access
+        match VfsManager::stat(remote_path) {
             Ok(meta) => Ok(serde_json::json!({
                 "exists": true,
                 "size": meta.size,

@@ -258,4 +258,16 @@ impl VfsManager {
             Vec::new()
         }
     }
+    
+    /// Read directory contents
+    pub fn read_dir(path: &str) -> io::Result<Vec<crate::vfs::VfsDirEntry>> {
+        let manager = Self::global();
+        manager.local_backend.read_dir(path)
+    }
+    
+    /// Get file/directory metadata
+    pub fn stat(path: &str) -> io::Result<crate::vfs::VfsMetadata> {
+        let manager = Self::global();
+        manager.local_backend.metadata(path)
+    }
 }
