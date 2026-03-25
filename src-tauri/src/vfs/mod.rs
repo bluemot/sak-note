@@ -319,3 +319,6 @@ pub mod remote;
 
 /// VFS Manager for unified access
 pub mod manager;
+
+#[cfg(test)]
+mod tests;

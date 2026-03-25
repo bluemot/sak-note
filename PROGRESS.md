@@ -189,16 +189,17 @@ sak-editor/
 | `generate` | Generate text with AI |
 
 ## Next Steps
-1. [ ] Test frontend on local machine with GUI
+1. [x] ~~Test frontend on local machine with GUI~~ ✅ 可在 Ubuntu desktop 環境執行
 2. [ ] Implement SFTP backend → VfsManager integration
 3. [ ] Add file browser UI component
 4. [ ] Implement virtual scrolling in Editor.tsx
 5. [ ] Add marks persistence (marks_module → file_engine integration)
 
 ## Known Issues
-- [ ] Headless server can't run Tauri GUI (needs local machine)
+- [x] ~~Headless server can't run Tauri GUI~~ ✅ Ubuntu desktop 環境可正常執行（Rust 1.94.0）
 - [ ] SFTP backend exists but not fully wired to VfsManager
 - [ ] file_engine chunk system somewhat redundant with VFS
+- [ ] cargo build 產生 116 warnings有待整理
 
 ## Git Commits
 - `c555d12` - Add read_dir and stat to file module, integrate with VfsManager
@@ -212,3 +213,16 @@ sak-editor/
 - Focus on large file performance from day one
 - Use streaming for file operations
 - Keep UI responsive with async operations
+
+## 2026-03-25 - Tauri Dev 環境修復
+- 補充安裝系統依賴：`libgtk-3-dev`, `libjavascriptcoregtk-4.1-dev`, `libsoup-3.0-dev`
+- 修復 `tauri.conf.json`：加入 `app.frontend.devUrl: "http://localhost:5173"` 設定
+- 前端 Vite dev server 正常運行在 `http://localhost:5173`
+- Tauri dev 可正確載入前端頁面
+
+## 2026-03-24 - 成功在 Ubuntu Desktop 執行 GUI
+- 安裝 Rust toolchain (1.94.0)
+- `cargo build --release` 編譯成功（116 warnings）
+- Tauri app 可正常啟動，視窗、選單、搜尋列、視圖切換皆正常
+- 前端 Vite dev server 可單獨運行（無 backend）
+- 截圖已保存至 `/home/ubuntu/.openclaw/media/browser/`

@@ -36,7 +36,7 @@ export default function LlmChat({ filePath }: LlmChatProps) {
   
   // Scroll to bottom on new messages
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    messagesEndRef.current?.scrollIntoView?.({ behavior: 'smooth' })
   }, [messages])
   
   const checkConnection = async () => {

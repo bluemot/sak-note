@@ -1,16 +1,28 @@
 {
   "name": "sak-editor",
   "version": "1.0.0",
-  "description": "",
+  "description": "Modern cross-platform text editor with large file handling, LLM integration, and SFTP support",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "bash tests/run_all_tests.sh",
+    "test:e2e": "npx playwright test",
+    "test:e2e:ui": "npx playwright test --ui",
+    "dev": "cd src-frontend && npm run dev",
+    "build": "cd src-frontend && npm run build && cd ../src-tauri && cargo build --release",
+    "tauri-dev": "cd src-tauri && cargo tauri dev",
+    "tauri-build": "cd src-tauri && cargo tauri build"
   },
-  "keywords": [],
+  "keywords": [
+    "editor",
+    "tauri",
+    "rust",
+    "react"
+  ],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
   "devDependencies": {
+    "@playwright/test": "^1.58.2",
     "@tauri-apps/api": "^2.10.1",
     "@tauri-apps/cli": "^2.10.1",
     "@types/react": "^19.2.14",

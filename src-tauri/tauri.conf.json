@@ -3,6 +3,10 @@
   "productName": "SAK Editor",
   "version": "0.1.0",
   "identifier": "com.sak.editor",
+  "build": {
+    "frontendDist": "../src-frontend/dist",
+    "devUrl": "http://localhost:5173"
+  },
   "app": {
     "withGlobalTauri": true,
     "windows": [
