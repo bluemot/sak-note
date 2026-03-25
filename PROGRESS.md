@@ -18,6 +18,55 @@ A modern cross-platform text editor with:
 
 ## Progress Log
 
+### 2026-03-25 - 完整自動化測試套件 (117 tests passing)
+
+#### Tauri v2 API 兼容性修復
+- [x] 更新 `@tauri-apps/api` 從 v1.5 到 v2.0
+- [x] 替換 `@tauri-apps/api/tauri` 為 `@tauri-apps/api/core`
+- [x] 替換 `@tauri-apps/api/dialog` 為 `@tauri-apps/plugin-dialog`
+- [x] 更新所有組件 imports (App.tsx, Editor.tsx, HexViewer.tsx, LlmChat.tsx, MarkPanel.tsx)
+- [x] 修復 LlmChat.tsx scrollIntoView null 檢查
+
+#### Layer 1: Rust 單元測試 (12 tests)
+- [x] VFS EditJournal 測試 - undo/redo, piece table, effective size
+- [x] 所有 Rust 測試通過 `cargo test`
+
+#### Layer 2: React 組件測試 (15 tests)
+- [x] Vitest + Testing Library 設置
+- [x] Toolbar 組件測試 (9 tests)
+- [x] Sidebar 組件測試 (6 tests)
+- [x] 所有組件測試通過 `npm run test`
+
+#### Layer 3: Playwright E2E UI 自動化測試 (9 tests)
+- [x] 真正啟動瀏覽器並點擊 UI 元素
+- [x] should launch app and show welcome screen
+- [x] should display all feature items
+- [x] should have sidebar with three tabs
+- [x] should show "No file open" message initially
+- [x] should switch between sidebar tabs
+- [x] should have Open File button that can be clicked
+- [x] should have search functionality UI
+- [x] should have toolbar with all buttons
+- [x] should handle window resize
+- [x] 全部 9 個測試通過 (9.5s)
+
+#### Layer 3: Shell E2E 測試 (81 tests)
+- [x] VFS Core 單元測試 (16 tests)
+- [x] App Structure 測試 (34 tests)
+- [x] File Operations 測試 (31 tests)
+
+#### 一键脚本
+- [x] `install.sh` / `install.bat` - 一键环境安装
+- [x] `build.sh` / `build.bat` - 一键构建 release
+- [x] `help.sh` - 显示可用命令
+- [x] 所有脚本支持 `--help` / `help` 参数
+
+**总计: 117 个测试全部通过**
+- Rust: 12
+- React: 15
+- Playwright: 9
+- Shell: 81
+
 ### 2026-03-23 - VFS Integration & Module System
 
 #### VFS Architecture (Unified File Access)
@@ -136,6 +185,15 @@ sak-editor/
 │   │   ├── HexViewer.tsx
 │   │   └── Toolbar.tsx
 │   └── index.css
+├── tests/
+│   ├── e2e/
+│   │   └── playwright/
+│   │       └── ui-automation.spec.ts  # 9 tests
+│   ├── unit/
+│   │   └── test_vfs_core.sh         # 16 tests
+│   └── run_all_tests.sh             # test runner
+├── install.sh / install.bat   # One-click setup
+├── build.sh / build.bat       # One-click build
 ├── PROGRESS.md
 └── README.md
 ```
@@ -188,20 +246,75 @@ sak-editor/
 | `ask_about_file` | Ask AI about file content |
 | `generate` | Generate text with AI |
 
+## Testing Strategy (3-Layer)
+
+### Layer 1: Rust Unit Tests (12 tests)
+Run: `cargo test --lib vfs::`
+- EditJournal operations
+- Piece table functionality
+- Undo/Redo system
+
+### Layer 2: React Component Tests (15 tests)
+Run: `cd src-frontend && npm test`
+- Toolbar component (9 tests)
+- Sidebar component (6 tests)
+- Vitest + React Testing Library
+
+### Layer 3: E2E Tests
+
+#### Playwright UI Automation (9 tests)
+Run: `npm run test:e2e`
+- Real browser automation
+- Click UI elements
+- Verify visual state
+- All tests pass in ~9.5s
+
+#### Shell Script Tests (81 tests)
+Run: `./tests/run_all_tests.sh`
+- VFS Core: 16 tests
+- App Structure: 34 tests
+- File Operations: 31 tests
+
+**Total: 117 tests passing**
+
+## Quick Commands
+
+```bash
+# Setup
+./install.sh help      # Show install help
+./install.sh          # Install all dependencies
+
+# Development
+npm run dev           # Start dev server
+npm run tauri-dev     # Start Tauri dev mode
+
+# Build
+./build.sh help       # Show build help
+./build.sh            # Build release version
+
+# Test
+npm test              # Run all tests (117 total)
+npm run test:e2e      # Run Playwright UI tests
+```
+
 ## Next Steps
-1. [x] ~~Test frontend on local machine with GUI~~ ✅ 可在 Ubuntu desktop 環境執行
-2. [ ] Implement SFTP backend → VfsManager integration
-3. [ ] Add file browser UI component
-4. [ ] Implement virtual scrolling in Editor.tsx
-5. [ ] Add marks persistence (marks_module → file_engine integration)
+1. [x] ~~Test frontend on local machine with GUI~~ ✅ Ubuntu desktop 可執行
+2. [x] ~~Add comprehensive test suite~~ ✅ 117 tests passing
+3. [ ] Implement SFTP backend → VfsManager integration
+4. [ ] Add file browser UI component
+5. [ ] Implement virtual scrolling in Editor.tsx
+6. [ ] Add marks persistence (marks_module → file_engine integration)
 
 ## Known Issues
-- [x] ~~Headless server can't run Tauri GUI~~ ✅ Ubuntu desktop 環境可正常執行（Rust 1.94.0）
+- [x] ~~Headless server can't run Tauri GUI~~ ✅ Ubuntu desktop 可正常執行
+- [x] ~~Tauri API v1/v2 mismatch~~ ✅ 已修復
 - [ ] SFTP backend exists but not fully wired to VfsManager
 - [ ] file_engine chunk system somewhat redundant with VFS
-- [ ] cargo build 產生 116 warnings有待整理
+- [ ] cargo build 產生 116 warnings 待整理
 
 ## Git Commits
+- `a7116c5` - Fix Tauri v2 API compatibility and add Playwright tests (117 tests)
+- `72e1520` - Add comprehensive test suite and install/build scripts
 - `c555d12` - Add read_dir and stat to file module, integrate with VfsManager
 - `b896245` - VFS optimization: fix Clone bug, piece table, Mmap cache
 - `9f16421` - Fix TypeScript unused variable warnings
@@ -213,16 +326,4 @@ sak-editor/
 - Focus on large file performance from day one
 - Use streaming for file operations
 - Keep UI responsive with async operations
-
-## 2026-03-25 - Tauri Dev 環境修復
-- 補充安裝系統依賴：`libgtk-3-dev`, `libjavascriptcoregtk-4.1-dev`, `libsoup-3.0-dev`
-- 修復 `tauri.conf.json`：加入 `app.frontend.devUrl: "http://localhost:5173"` 設定
-- 前端 Vite dev server 正常運行在 `http://localhost:5173`
-- Tauri dev 可正確載入前端頁面
-
-## 2026-03-24 - 成功在 Ubuntu Desktop 執行 GUI
-- 安裝 Rust toolchain (1.94.0)
-- `cargo build --release` 編譯成功（116 warnings）
-- Tauri app 可正常啟動，視窗、選單、搜尋列、視圖切換皆正常
-- 前端 Vite dev server 可單獨運行（無 backend）
-- 截圖已保存至 `/home/ubuntu/.openclaw/media/browser/`
+- Testing follows 3-layer strategy: Rust unit → React component → E2E automation
