@@ -3,7 +3,7 @@ import '@testing-library/jest-dom'
 import { vi } from 'vitest'
 
 // Mock Tauri API
-vi.mock('@tauri-apps/api/dialog', () => ({
+vi.mock('@tauri-apps/plugin-dialog', () => ({
   open: vi.fn()
 }))
 
