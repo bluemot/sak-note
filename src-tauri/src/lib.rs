@@ -18,6 +18,7 @@ mod ui_commands;
 mod session_manager;
 mod print_manager;
 mod find_in_files;
+mod plugin_runtime;
 
 use bookmark_commands::{bookmark_toggle, bookmark_get_all, bookmark_next, bookmark_prev, bookmark_remove, bookmark_clear, bookmark_update_label};
 use sftp_commands::{sftp_list_sites, sftp_add_site, sftp_update_site, sftp_remove_site, sftp_connect_site, sftp_test_connection};
@@ -660,6 +661,19 @@ pub fn run() {
             print_manager::file_export_pdf,
             // Find in Files
             find_in_files::find_in_files,
+            // Plugin management commands
+            plugin_runtime::commands::plugin_init,
+            plugin_runtime::commands::plugin_discover,
+            plugin_runtime::commands::plugin_load_all,
+            plugin_runtime::commands::plugin_load,
+            plugin_runtime::commands::plugin_unload,
+            plugin_runtime::commands::plugin_list_loaded,
+            plugin_runtime::commands::plugin_get_info,
+            plugin_runtime::commands::plugin_execute,
+            plugin_runtime::commands::plugin_set_enabled,
+            plugin_runtime::commands::plugin_get_capabilities,
+            plugin_runtime::commands::plugin_broadcast_event,
+            plugin_runtime::commands::plugin_get_directory,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

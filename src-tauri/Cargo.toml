@@ -25,6 +25,10 @@ uuid = { version = "1", features = ["v4"] }
 chrono = { version = "0.4", features = ["serde"] }
 base64 = "0.22"
 dirs = "5.0"
+wasmtime = "23.0"
+wasmtime-wasi = "23.0"
+wit-bindgen = "0.30"
+anyhow = "1.0"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

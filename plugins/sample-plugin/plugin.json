@@ -1,0 +1,99 @@
+{
+    "id": "com.example.sample-plugin",
+    "name": "Sample Plugin",
+    "version": "0.1.0",
+    "description": "A sample plugin demonstrating the SAK Editor WASM plugin system",
+    "author": "SAK Editor Team",
+    "entry_point": "target/wasm32-unknown-unknown/release/sample_plugin.wasm",
+    "capabilities": [
+        {
+            "id": "uppercase",
+            "name": "Convert to Uppercase",
+            "description": "Convert selected text to uppercase",
+            "trigger": {
+                "type": "Command",
+                "command": "sample.uppercase"
+            },
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "text": { "type": "string" }
+                },
+                "required": ["text"]
+            },
+            "output_schema": {
+                "type": "object",
+                "properties": {
+                    "result": { "type": "string" }
+                }
+            }
+        },
+        {
+            "id": "word-count",
+            "name": "Word Count",
+            "description": "Count words and characters in the document",
+            "trigger": {
+                "type": "Command",
+                "command": "sample.word-count"
+            },
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "text": { "type": "string" }
+                },
+                "required": ["text"]
+            },
+            "output_schema": {
+                "type": "object",
+                "properties": {
+                    "word_count": { "type": "integer" },
+                    "char_count": { "type": "integer" },
+                    "char_count_no_spaces": { "type": "integer" }
+                }
+            }
+        },
+        {
+            "id": "sort-lines",
+            "name": "Sort Lines",
+            "description": "Sort lines in various ways",
+            "trigger": {
+                "type": "Command",
+                "command": "sample.sort-lines"
+            },
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "text": { "type": "string" },
+                    "sort_type": { 
+                        "type": "string",
+                        "enum": ["ascending", "descending", "length_asc", "length_desc"],
+                        "default": "ascending"
+                    }
+                },
+                "required": ["text"]
+            },
+            "output_schema": {
+                "type": "object",
+                "properties": {
+                    "result": { "type": "string" },
+                    "line_count": { "type": "integer" }
+                }
+            }
+        }
+    ],
+    "ui_components": [
+        {
+            "id": "word-count-panel",
+            "type": "Panel",
+            "title": "Word Count",
+            "position": "Right",
+            "width": 250
+        }
+    ],
+    "permissions": [
+        "FileRead",
+        "EditorState",
+        "Notifications"
+    ],
+    "min_editor_version": "0.1.0"
+}
