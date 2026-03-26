@@ -9,7 +9,7 @@ use crate::semantic::blocks::{BlockId, SemanticBlock};
 use crate::semantic::parser::CodeParser;
 use crate::semantic::query::QueryEngine;
 use crate::semantic::bridge::{LLMBridge, LLMEditParser, LLMFormat};
-use crate::semantic::conversation::{Conversation, ConversationManager, ConversationMessage};
+use crate::semantic::intelligent_marks::{IntelligentMarkEngine, ApplyIntelligentMarksCommand, ApplyIntelligentMarksResult, NavigationTarget};
 use crate::vfs::manager::VfsManager;
 use std::sync::{Arc, Mutex};
 use lazy_static::lazy_static;

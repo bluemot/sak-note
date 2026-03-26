@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import LlmChat from './LlmChat'
+import SemanticPanel from './SemanticPanel'
 import './Sidebar.css'
 
 interface SidebarProps {
@@ -15,7 +16,7 @@ function formatBytes(bytes: number): string {
 }
 
 function Sidebar({ currentFile }: SidebarProps) {
-  const [activeTab, setActiveTab] = useState<'info' | 'chat' | 'marks'>('info')
+  const [activeTab, setActiveTab] = useState<'info' | 'chat' | 'marks' | 'semantic'>('info')
 
   return (
     <div className="sidebar">
@@ -25,6 +26,12 @@ function Sidebar({ currentFile }: SidebarProps) {
           onClick={() => setActiveTab('info')}
         >
           ℹ️ Info
+        </button>
+        <button
+          className={`tab ${activeTab === 'semantic' ? 'active' : ''}`}
+          onClick={() => setActiveTab('semantic')}
+        >
+          🔍 Semantic
         </button>
         <button
           className={`tab ${activeTab === 'chat' ? 'active' : ''}`}
@@ -68,6 +75,10 @@ function Sidebar({ currentFile }: SidebarProps) {
               <p className="no-file">No file open</p>
             )}
           </div>
+        )}
+
+        {activeTab === 'semantic' && (
+          <SemanticPanel filePath={currentFile?.path || null} />
         )}
 
         {activeTab === 'chat' && (

@@ -10,6 +10,7 @@ mod modular;
 mod modules;
 mod vfs;
 mod semantic;
+mod mcp_server;
 
 use file_engine::{FileEngine, ChunkManager, EditableFileManager, EditOp, SearchEngine, SearchResult, FileInfo, CHUNK_SIZE};
 use mark_engine::{MarkEngine, MarkColor, Mark, MarkUpdate, MarkExport};
