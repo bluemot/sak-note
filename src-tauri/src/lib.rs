@@ -15,6 +15,9 @@ mod bookmark_engine;
 mod bookmark_commands;
 mod sftp_site_manager;
 mod sftp_commands;
+mod recent_files;
+mod line_operations;
+mod ui_commands;
 
 use file_engine::{FileEngine, ChunkManager, EditableFileManager, EditOp, SearchEngine, SearchResult, FileInfo, CHUNK_SIZE};
 use mark_engine::{MarkEngine, MarkColor, Mark, MarkUpdate, MarkExport};
@@ -621,6 +624,30 @@ pub fn run() {
             sftp_remove_site,
             sftp_connect_site,
             sftp_test_connection,
+            // Recent files commands
+            recent_files::file_get_recent_files,
+            recent_files::file_clear_recent_files,
+            recent_files::file_add_recent_file,
+            // Line operations commands
+            line_operations::edit_duplicate_line,
+            line_operations::edit_move_line_up,
+            line_operations::edit_move_line_down,
+            line_operations::edit_delete_line,
+            line_operations::edit_join_lines,
+            line_operations::edit_split_line,
+            line_operations::edit_trim_trailing,
+            line_operations::edit_trim_leading,
+            line_operations::edit_trim_all,
+            line_operations::edit_to_uppercase,
+            line_operations::edit_to_lowercase,
+            line_operations::edit_sort_lines,
+            line_operations::edit_toggle_comment,
+            // Go to line
+            ui_goto_line,
+            // LLM-friendly UI commands
+            ui_get_editor_state,
+            ui_execute_line_operation,
+            ui_execute_text_operation,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

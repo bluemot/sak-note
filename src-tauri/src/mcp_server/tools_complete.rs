@@ -23,8 +23,8 @@ pub fn register_all_module_tools(registry: &mut ToolRegistry) {
     // NEW: VFS tools
     register_vfs_tools(registry);
     
-    // NEW: Editor State tools
-    register_editor_tools(registry);
+    // NEW: Line Operations tools
+    register_line_operation_tools(registry);
 }
 
 /// UI Control Tools - LLM can control the editor interface
@@ -367,6 +367,281 @@ fn register_editor_tools(registry: &mut ToolRegistry) {
                     "count": {"type": "number"},
                 }
             }),
+        },
+        examples: vec![],
+    });
+}
+
+/// Line Operation Tools - LLM can manipulate text lines
+fn register_line_operation_tools(registry: &mut ToolRegistry) {
+    // edit::duplicate_line - Duplicate current line
+    registry.register(Tool {
+        name: "edit::duplicate_line".to_string(),
+        description: "Duplicate the current line. Inserts a copy of the line below it.".to_string(),
+        parameters: ToolParameters {
+            type_: "object".to_string(),
+            properties: HashMap::from([
+                ("content".to_string(), ToolProperty {
+                    type_: "string".to_string(),
+                    description: "Full file content".to_string(),
+                    enum_values: None,
+                }),
+                ("line_number".to_string(), ToolProperty {
+                    type_: "number".to_string(),
+                    description: "Line number to duplicate (1-based)".to_string(),
+                    enum_values: None,
+                }),
+            ]),
+            required: vec!["content".to_string(), "line_number".to_string()],
+        },
+        returns: ToolReturns {
+            description: "Updated content with duplicated line".to_string(),
+            schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "content": {"type": "string"},
+                    "new_line_number": {"type": "number"},
+                }
+            }),
+        },
+        examples: vec![
+            ToolExample {
+                description: "Duplicate line 5".to_string(),
+                request: serde_json::json!({"content": "line1\nline2\nline3", "line_number": 2}),
+                response: serde_json::json!({"content": "line1\nline2\nline2\nline3", "new_line_number": 3}),
+            },
+        ],
+    });
+
+    // edit::move_line_up - Move line up
+    registry.register(Tool {
+        name: "edit::move_line_up".to_string(),
+        description: "Move the current line up by one position.".to_string(),
+        parameters: ToolParameters {
+            type_: "object".to_string(),
+            properties: HashMap::from([
+                ("content".to_string(), ToolProperty {
+                    type_: "string".to_string(),
+                    description: "Full file content".to_string(),
+                    enum_values: None,
+                }),
+                ("line_number".to_string(), ToolProperty {
+                    type_: "number".to_string(),
+                    description: "Line number to move (1-based)".to_string(),
+                    enum_values: None,
+                }),
+            ]),
+            required: vec!["content".to_string(), "line_number".to_string()],
+        },
+        returns: ToolReturns {
+            description: "Updated content with line moved".to_string(),
+            schema: serde_json::json!({"type": "object"}),
+        },
+        examples: vec![],
+    });
+
+    // edit::move_line_down - Move line down
+    registry.register(Tool {
+        name: "edit::move_line_down".to_string(),
+        description: "Move the current line down by one position.".to_string(),
+        parameters: ToolParameters {
+            type_: "object".to_string(),
+            properties: HashMap::from([
+                ("content".to_string(), ToolProperty {
+                    type_: "string".to_string(),
+                    description: "Full file content".to_string(),
+                    enum_values: None,
+                }),
+                ("line_number".to_string(), ToolProperty {
+                    type_: "number".to_string(),
+                    description: "Line number to move (1-based)".to_string(),
+                    enum_values: None,
+                }),
+            ]),
+            required: vec!["content".to_string(), "line_number".to_string()],
+        },
+        returns: ToolReturns {
+            description: "Updated content with line moved".to_string(),
+            schema: serde_json::json!({"type": "object"}),
+        },
+        examples: vec![],
+    });
+
+    // edit::delete_line - Delete line
+    registry.register(Tool {
+        name: "edit::delete_line".to_string(),
+        description: "Delete the current line completely.".to_string(),
+        parameters: ToolParameters {
+            type_: "object".to_string(),
+            properties: HashMap::from([
+                ("content".to_string(), ToolProperty {
+                    type_: "string".to_string(),
+                    description: "Full file content".to_string(),
+                    enum_values: None,
+                }),
+                ("line_number".to_string(), ToolProperty {
+                    type_: "number".to_string(),
+                    description: "Line number to delete (1-based)".to_string(),
+                    enum_values: None,
+                }),
+            ]),
+            required: vec!["content".to_string(), "line_number".to_string()],
+        },
+        returns: ToolReturns {
+            description: "Updated content without deleted line".to_string(),
+            schema: serde_json::json!({"type": "object"}),
+        },
+        examples: vec![],
+    });
+
+    // edit::sort_lines - Sort lines
+    registry.register(Tool {
+        name: "edit::sort_lines".to_string(),
+        description: "Sort lines alphabetically or numerically.".to_string(),
+        parameters: ToolParameters {
+            type_: "object".to_string(),
+            properties: HashMap::from([
+                ("content".to_string(), ToolProperty {
+                    type_: "string".to_string(),
+                    description: "Full file content".to_string(),
+                    enum_values: None,
+                }),
+                ("start_line".to_string(), ToolProperty {
+                    type_: "number".to_string(),
+                    description: "Start line number (1-based)".to_string(),
+                    enum_values: None,
+                }),
+                ("end_line".to_string(), ToolProperty {
+                    type_: "number".to_string(),
+                    description: "End line number (1-based)".to_string(),
+                    enum_values: None,
+                }),
+                ("ascending".to_string(), ToolProperty {
+                    type_: "boolean".to_string(),
+                    description: "Sort ascending (true) or descending (false)".to_string(),
+                    enum_values: None,
+                }),
+            ]),
+            required: vec!["content".to_string(), "start_line".to_string(), "end_line".to_string()],
+        },
+        returns: ToolReturns {
+            description: "Updated content with sorted lines".to_string(),
+            schema: serde_json::json!({"type": "object"}),
+        },
+        examples: vec![],
+    });
+
+    // edit::toggle_comment - Toggle line comment
+    registry.register(Tool {
+        name: "edit::toggle_comment".to_string(),
+        description: "Toggle comment/uncomment for selected lines.".to_string(),
+        parameters: ToolParameters {
+            type_: "object".to_string(),
+            properties: HashMap::from([
+                ("content".to_string(), ToolProperty {
+                    type_: "string".to_string(),
+                    description: "Full file content".to_string(),
+                    enum_values: None,
+                }),
+                ("start_line".to_string(), ToolProperty {
+                    type_: "number".to_string(),
+                    description: "Start line number (1-based)".to_string(),
+                    enum_values: None,
+                }),
+                ("end_line".to_string(), ToolProperty {
+                    type_: "number".to_string(),
+                    description: "End line number (1-based)".to_string(),
+                    enum_values: None,
+                }),
+                ("comment_prefix".to_string(), ToolProperty {
+                    type_: "string".to_string(),
+                    description: "Comment prefix (e.g., //, #)".to_string(),
+                    enum_values: None,
+                }),
+            ]),
+            required: vec!["content".to_string(), "start_line".to_string(), "end_line".to_string()],
+        },
+        returns: ToolReturns {
+            description: "Updated content with comments toggled".to_string(),
+            schema: serde_json::json!({"type": "object"}),
+        },
+        examples: vec![
+            ToolExample {
+                description: "Comment out lines 2-3 in Rust".to_string(),
+                request: serde_json::json!({
+                    "content": "fn main() {\n    println!(\"Hello\");\n    println!(\"World\");\n}",
+                    "start_line": 2,
+                    "end_line": 3,
+                    "comment_prefix": "//"
+                }),
+                response: serde_json::json!({
+                    "content": "fn main() {\n    // println!(\"Hello\");\n    // println!(\"World\");\n}",
+                    "action": "commented"
+                }),
+            },
+        ],
+    });
+
+    // edit::trim_whitespace - Trim whitespace
+    registry.register(Tool {
+        name: "edit::trim_whitespace".to_string(),
+        description: "Trim whitespace from lines (trailing, leading, or all).".to_string(),
+        parameters: ToolParameters {
+            type_: "object".to_string(),
+            properties: HashMap::from([
+                ("content".to_string(), ToolProperty {
+                    type_: "string".to_string(),
+                    description: "Full file content".to_string(),
+                    enum_values: None,
+                }),
+                ("mode".to_string(), ToolProperty {
+                    type_: "string".to_string(),
+                    description: "Trim mode: trailing, leading, or all".to_string(),
+                    enum_values: Some(vec!["trailing".to_string(), "leading".to_string(), "all".to_string()]),
+                }),
+            ]),
+            required: vec!["content".to_string(), "mode".to_string()],
+        },
+        returns: ToolReturns {
+            description: "Updated content with trimmed whitespace".to_string(),
+            schema: serde_json::json!({"type": "object"}),
+        },
+        examples: vec![],
+    });
+
+    // edit::change_case - Change text case
+    registry.register(Tool {
+        name: "edit::change_case".to_string(),
+        description: "Change text case to uppercase or lowercase.".to_string(),
+        parameters: ToolParameters {
+            type_: "object".to_string(),
+            properties: HashMap::from([
+                ("content".to_string(), ToolProperty {
+                    type_: "string".to_string(),
+                    description: "Full file content".to_string(),
+                    enum_values: None,
+                }),
+                ("start".to_string(), ToolProperty {
+                    type_: "number".to_string(),
+                    description: "Start position in content".to_string(),
+                    enum_values: None,
+                }),
+                ("end".to_string(), ToolProperty {
+                    type_: "number".to_string(),
+                    description: "End position in content".to_string(),
+                    enum_values: None,
+                }),
+                ("case".to_string(), ToolProperty {
+                    type_: "string".to_string(),
+                    description: "Target case: uppercase or lowercase".to_string(),
+                    enum_values: Some(vec!["uppercase".to_string(), "lowercase".to_string()]),
+                }),
+            ]),
+            required: vec!["content".to_string(), "start".to_string(), "end".to_string(), "case".to_string()],
+        },
+        returns: ToolReturns {
+            description: "Updated content with changed case".to_string(),
+            schema: serde_json::json!({"type": "object"}),
         },
         examples: vec![],
     });
