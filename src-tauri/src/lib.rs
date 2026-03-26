@@ -11,6 +11,10 @@ mod modules;
 mod vfs;
 mod semantic;
 mod mcp_server;
+mod bookmark_engine;
+mod bookmark_commands;
+mod sftp_site_manager;
+mod sftp_commands;
 
 use file_engine::{FileEngine, ChunkManager, EditableFileManager, EditOp, SearchEngine, SearchResult, FileInfo, CHUNK_SIZE};
 use mark_engine::{MarkEngine, MarkColor, Mark, MarkUpdate, MarkExport};
@@ -602,6 +606,21 @@ pub fn run() {
             semantic::commands::semantic_conversation_start,
             semantic::commands::semantic_conversation_send,
             semantic::commands::semantic_conversation_history,
+            // Bookmark commands
+            bookmark_toggle,
+            bookmark_get_all,
+            bookmark_next,
+            bookmark_prev,
+            bookmark_remove,
+            bookmark_clear,
+            bookmark_update_label,
+            // SFTP Site Manager commands
+            sftp_list_sites,
+            sftp_add_site,
+            sftp_update_site,
+            sftp_remove_site,
+            sftp_connect_site,
+            sftp_test_connection,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
