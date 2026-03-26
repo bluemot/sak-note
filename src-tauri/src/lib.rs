@@ -18,6 +18,9 @@ mod sftp_commands;
 mod recent_files;
 mod line_operations;
 mod ui_commands;
+mod session_manager;
+mod print_manager;
+mod find_in_files;
 
 use file_engine::{FileEngine, ChunkManager, EditableFileManager, EditOp, SearchEngine, SearchResult, FileInfo, CHUNK_SIZE};
 use mark_engine::{MarkEngine, MarkColor, Mark, MarkUpdate, MarkExport};
@@ -648,6 +651,16 @@ pub fn run() {
             ui_get_editor_state,
             ui_execute_line_operation,
             ui_execute_text_operation,
+            // Session management
+            session_manager::session_save,
+            session_manager::session_load,
+            session_manager::session_list,
+            session_manager::session_delete,
+            // Print
+            print_manager::file_print,
+            print_manager::file_export_pdf,
+            // Find in Files
+            find_in_files::find_in_files,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
