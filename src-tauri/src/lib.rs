@@ -9,6 +9,7 @@ mod sak_format;
 mod modular;
 mod modules;
 mod vfs;
+mod semantic;
 
 use file_engine::{FileEngine, ChunkManager, EditableFileManager, EditOp, SearchEngine, SearchResult, FileInfo, CHUNK_SIZE};
 use mark_engine::{MarkEngine, MarkColor, Mark, MarkUpdate, MarkExport};
@@ -590,7 +591,16 @@ pub fn run() {
             get_mark_count,
             export_marks,
             // Module execution
-            execute_module
+            execute_module,
+            // Semantic LLM-friendly commands
+            semantic::commands::semantic_parse_file,
+            semantic::commands::semantic_query,
+            semantic::commands::semantic_export_llm,
+            semantic::commands::semantic_edit,
+            semantic::commands::semantic_parse_edit_request,
+            semantic::commands::semantic_conversation_start,
+            semantic::commands::semantic_conversation_send,
+            semantic::commands::semantic_conversation_history,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
