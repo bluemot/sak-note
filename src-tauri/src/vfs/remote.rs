@@ -2,6 +2,8 @@
 //!
 //! Uses libssh2 (via ssh2 crate) for SFTP operations.
 
+#![allow(dead_code)]
+
 use super::{VfsBackend, VfsFile, VfsMetadata, VfsDirEntry};
 use std::io::{self, Read, Write, Seek, SeekFrom};
 use std::net::TcpStream;

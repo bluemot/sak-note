@@ -3,8 +3,9 @@
 //! Transforms raw text into LLM-friendly semantic blocks
 //! Enables natural language queries and intent-based editing
 
+#![allow(dead_code)]
+
 use serde::{Serialize, Deserialize};
-use std::collections::HashMap;
 
 pub mod blocks;
 pub mod parser;
@@ -14,9 +15,8 @@ pub mod commands;
 pub mod intelligent_marks;
 pub mod conversation;
 
-pub use blocks::{SemanticBlock, BlockType, BlockId, Location};
-pub use parser::{CodeParser, ParseResult};
-pub use query::{QueryEngine, QueryResult};
+pub use blocks::{SemanticBlock, BlockType, BlockId};
+pub use query::QueryEngine;
 pub use bridge::{LLMBridge, LLMFormat};
 
 /// Semantic understanding of a document
@@ -102,7 +102,7 @@ impl SemanticDocument {
     }
 
     /// Get context around a block
-    pub fn get_context(&self, block_id: &BlockId, depth: usize) -> Vec<&SemanticBlock> {
+    pub fn get_context(&self, block_id: &BlockId, _depth: usize) -> Vec<&SemanticBlock> {
         let mut context = Vec::new();
         if let Some(block) = self.get_block(block_id) {
             context.push(block);
@@ -127,7 +127,7 @@ impl SemanticDocument {
     /// Apply semantic edit
     pub fn apply_edit(&mut self, edit: SemanticEdit) -> Result<(), String> {
         match edit {
-            SemanticEdit::AddBlock { block_type, content, after } => {
+            SemanticEdit::AddBlock { block_type, content, after: _ } => {
                 let block = SemanticBlock::new(block_type, content);
                 // Add to blocks list
                 self.blocks.push(block);

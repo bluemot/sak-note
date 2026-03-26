@@ -13,6 +13,8 @@
 //! - file.save: Save changes
 //! - file.undo: Undo last operation
 //! - file.redo: Redo last undone operation
+
+#![allow(dead_code)]
 //! - file.get_info: Get file information
 //! - file.get_hex: Get hex view
 

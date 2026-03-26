@@ -2,6 +2,8 @@
 //!
 //! Allows LLM to query code using natural language
 
+#![allow(dead_code)]
+
 use crate::semantic::blocks::*;
 use crate::semantic::SemanticDocument;
 use regex::Regex;

@@ -2,19 +2,15 @@
 //!
 //! Connects MCP tool definitions to actual module implementations
 
+#![allow(dead_code)]
+
 use async_trait::async_trait;
 use serde_json::Value;
-use crate::modules::file_module::FileModule;
-use crate::modules::llm_module::LlmModule;
-use crate::modules::sftp_module::SftpModule;
-use crate::modules::marks_module::MarksModule;
-use crate::semantic::intelligent_marks::{IntelligentMarkEngine, ApplyIntelligentMarksResult, NavigationTarget};
+use crate::semantic::intelligent_marks::{IntelligentMarkEngine, NavigationTarget};
 use crate::semantic::SemanticDocument;
-use crate::semantic::parser::CodeParser;
 use crate::semantic::query::QueryEngine;
 use crate::semantic::bridge::LLMBridge;
-use crate::mark_engine::{MarkColor, Mark};
-use std::sync::{Arc, Mutex};
+use crate::mark_engine::MarkColor;
 
 /// Tool handler trait
 #[async_trait]
@@ -508,7 +504,7 @@ impl ToolHandler for MarksCreateHandler {
         let color_str = params["color"].as_str().unwrap_or("yellow");
         let label = params.get("label").and_then(|v| v.as_str());
         
-        let color = match color_str {
+        let _color = match color_str {
             "red" => MarkColor::Red,
             "orange" => MarkColor::Orange,
             "yellow" => MarkColor::Yellow,
@@ -560,7 +556,7 @@ impl ToolHandler for MarksNavigateHandler {
         
         // This triggers UI navigation
         // In real implementation, this would emit an event or call into the frontend
-        let result = crate::modular::execute_module(
+        let _result = crate::modular::execute_module(
             "marks",
             "navigate",
             serde_json::json!({

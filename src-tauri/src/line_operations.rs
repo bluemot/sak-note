@@ -306,7 +306,7 @@ pub fn edit_toggle_comment(
         if all_commented {
             // Uncomment
             let trimmed = line.trim_start();
-            if let Some(pos) = trimmed.find(&comment_prefix) {
+            if let Some(_pos) = trimmed.find(&comment_prefix) {
                 let spaces = line.len() - line.trim_start().len();
                 let new_line = format!(
                     "{}{}",

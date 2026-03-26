@@ -2,7 +2,9 @@
 //!
 //! Exposes site management functionality to the frontend
 
-use serde::{Deserialize, Serialize};
+#![allow(dead_code)]
+
+use serde::Deserialize;
 use serde_json::Value;
 use crate::sftp_site_manager::{SiteManager, SftpSite};
 use std::sync::Mutex;

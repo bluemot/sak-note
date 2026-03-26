@@ -3,12 +3,13 @@
 //! Manages saved SFTP connections/sites with encrypted credentials
 //! Users can save multiple sites and quickly connect
 
+#![allow(dead_code)]
+
 use serde::{Serialize, Deserialize};
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use crate::modular::ModuleError;
-use base64::{Engine as _, engine::general_purpose};
 use dirs;
 
 /// A saved SFTP site configuration
@@ -91,18 +92,20 @@ impl SftpSite {
 
 /// Simple XOR encryption for passwords (in production, use proper encryption)
 fn encrypt_password(password: &str) -> String {
+    use base64::Engine;
     let key = b"sak_editor_key_2024";
     let encrypted: Vec<u8> = password
         .bytes()
         .enumerate()
         .map(|(i, b)| b ^ key[i % key.len()])
         .collect();
-    base64::encode(&encrypted)
+    base64::engine::general_purpose::STANDARD.encode(&encrypted)
 }
 
 fn decrypt_password(encrypted: &str) -> String {
+    use base64::Engine;
     let key = b"sak_editor_key_2024";
-    let bytes = base64::decode(encrypted).unwrap_or_default();
+    let bytes = base64::engine::general_purpose::STANDARD.decode(encrypted).unwrap_or_default();
     let decrypted: Vec<u8> = bytes
         .iter()
         .enumerate()

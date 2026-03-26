@@ -3,6 +3,8 @@
 //! Supports both local and remote (SFTP) backends.
 //! Backends can be registered for specific path patterns.
 
+#![allow(dead_code)]
+
 use crate::vfs::{VfsBackend, VfsMetadata, EditJournal, EditOp, Piece};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};

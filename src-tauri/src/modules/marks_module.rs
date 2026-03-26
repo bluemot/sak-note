@@ -12,9 +12,10 @@
 //! - marks.export: Export marks to JSON
 //! - marks.import: Import marks from JSON
 
+#![allow(dead_code)]
+
 use crate::modular::{Module, ModuleInfo, Capability, ModuleError};
 use crate::mark_engine::{MarkEngine, MarkColor, Mark};
-use serde::{Serialize, Deserialize};
 use serde_json::Value;
 use std::collections::HashMap;
 

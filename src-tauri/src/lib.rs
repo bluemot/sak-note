@@ -25,8 +25,6 @@ use ui_commands::{ui_goto_line, ui_get_editor_state, ui_execute_line_operation, 
 
 use file_engine::{FileEngine, EditOp, FileInfo, CHUNK_SIZE};
 use mark_engine::{MarkEngine, MarkColor, Mark, MarkUpdate, MarkExport};
-use sak_format::{SakFile, SakInfo};
-use modular::{ModuleRequest, ModuleResponse};
 
 // ============== Request/Response Types ==============
 

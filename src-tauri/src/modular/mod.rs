@@ -3,10 +3,12 @@
 //! Each module exposes its capabilities through JSON interfaces,
 //! allowing both internal components and LLMs to interact with them.
 
+#![allow(dead_code)]
+
 use serde::{Serialize, Deserialize};
 use serde_json::Value;
 use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
+use std::sync::RwLock;
 use once_cell::sync::Lazy;
 
 /// Global module registry

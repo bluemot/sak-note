@@ -15,13 +15,14 @@
 //! - sftp.mkdir/rmdir: Directory ops
 //! - sftp.unlink: Delete file
 
+#![allow(dead_code)]
+
 use crate::modular::{Module, ModuleInfo, Capability, ModuleError};
 use crate::vfs::manager::VfsManager;
-use crate::vfs::{VfsBackend, VfsMetadata, EditOp};
-use serde::{Serialize, Deserialize};
+use crate::vfs::{VfsBackend, EditOp};
 use serde_json::Value;
 use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
+use std::sync::RwLock;
 
 /// SSH connection config
 #[derive(Clone)]
@@ -437,10 +438,10 @@ impl SftpModule {
         
         // Get handle and apply edit
         let mut sessions = self.sessions.write().unwrap();
-        if let Some(session) = sessions.get_mut(file_handle) {
+        if let Some(_session) = sessions.get_mut(file_handle) {
             let mut handle = VfsManager::get(file_handle)
                 .ok_or_else(|| ModuleError::new("not_open", "File not open"))?;
-            handle.apply_edit(EditOp::Insert { offset, data: data.clone() });
+            let _ = handle.apply_edit(EditOp::Insert { offset, data: data.clone() });
         }
         
         Ok(serde_json::json!({

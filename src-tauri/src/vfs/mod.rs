@@ -9,7 +9,9 @@
 //! - Chunked reading for large files
 //! - Efficient seeking without loading entire file
 
-use std::io::{self, Read, Write, Seek, SeekFrom};
+#![allow(dead_code)]
+
+use std::io::{self, Read, Write, Seek};
 use std::sync::{Arc, RwLock};
 
 /// VFS backend trait - implemented by local and remote file systems

@@ -12,7 +12,7 @@ use crate::semantic::conversation::{Conversation, ConversationManager, Conversat
 use std::sync::Mutex;
 use lazy_static::lazy_static;
 
-/// Global conversation manager
+// Global conversation manager
 lazy_static! {
     static ref CONVERSATION_MANAGER: Mutex<ConversationManager> = 
         Mutex::new(ConversationManager::new());

@@ -10,11 +10,13 @@
 //! - llm.summarize: Summarize text content
 //! - llm.ask_about_file: Ask questions about current file
 
+#![allow(dead_code)]
+
 use crate::modular::{Module, ModuleInfo, Capability, ModuleError};
 use serde::{Serialize, Deserialize};
 use serde_json::Value;
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 
 /// Ollama API endpoint - supports cloud (ollama.com) or local
 const DEFAULT_OLLAMA_URL: &str = "https://ollama.com";
@@ -497,7 +499,7 @@ impl LlmModule {
         
         let default_model = self.default_model.lock().unwrap().clone();
         let model = input["model"].as_str().unwrap_or(&default_model);
-        let api_url = self.api_url.lock().unwrap().clone();
+        let _api_url = self.api_url.lock().unwrap().clone();
         
         let prompt = format!(
             "Summarize the following text in {} characters or less:\n\n{}",

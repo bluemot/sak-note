@@ -2,6 +2,8 @@
 //!
 //! Each module exposes operations as MCP Tools for LLM discovery
 
+#![allow(dead_code)]
+
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 

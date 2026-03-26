@@ -3,6 +3,8 @@
 //! Uses memory-mapped files for efficient large file handling.
 //! Caches mmaps and file handles for performance.
 
+#![allow(dead_code)]
+
 use super::{VfsBackend, VfsFile, VfsMetadata, VfsDirEntry};
 use std::os::unix::fs::PermissionsExt;
 use std::fs::{self, File, OpenOptions};

@@ -2,6 +2,8 @@
 //!
 //! Tracks recently opened files with persistence
 
+#![allow(dead_code)]
+
 use serde::{Serialize, Deserialize};
 use std::path::PathBuf;
 use std::fs;

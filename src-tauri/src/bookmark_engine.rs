@@ -3,6 +3,8 @@
 //! Manages bookmarks (F2 navigation) like Notepad++
 //! Bookmarks are persisted to .sakbookmarks files
 
+#![allow(dead_code)]
+
 use serde::{Serialize, Deserialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -125,7 +127,7 @@ impl BookmarkStore {
         let filename = original.file_name().unwrap_or_default();
         let bookmark_filename = format!(".{:?}.sakbookmarks", filename);
         // Remove quotes from OsStr debug
-        let bookmark_filename = bookmark_filename.trim_matches('"');
+        let _bookmark_filename = bookmark_filename.trim_matches('"');
         parent.join(format!(".{:?}.sakbookmarks", filename).trim_matches('"'))
     }
 

@@ -2,6 +2,8 @@
 //!
 //! Code is divided into meaningful units for LLM understanding
 
+#![allow(dead_code)]
+
 use serde::{Serialize, Deserialize};
 use std::fmt;
 

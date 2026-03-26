@@ -2,9 +2,10 @@
 //!
 //! Parses code into semantic blocks for LLM understanding
 
+#![allow(dead_code)]
+
 use crate::semantic::blocks::*;
 use regex::Regex;
-use std::collections::HashMap;
 
 /// Parse result containing blocks and any errors
 #[derive(Debug, Clone)]
@@ -88,11 +89,11 @@ impl RustParser {
         // Regex patterns for Rust
         let fn_regex = Regex::new(r"^(?:pub(?:\([^)]+\))?\s+)?(?:async\s+)?(?:unsafe\s+)?fn\s+(\w+)").unwrap();
         let struct_regex = Regex::new(r"^(?:pub\s+)?struct\s+(\w+)").unwrap();
-        let impl_regex = Regex::new(r"^impl(?:\s+\w+)?\s+for\s+(\w+)").unwrap();
+        let _impl_regex = Regex::new(r"^impl(?:\s+\w+)?\s+for\s+(\w+)").unwrap();
         let use_regex = Regex::new(r"^use\s+(.+);$").unwrap();
         let mod_regex = Regex::new(r"^(?:pub\s+)?mod\s+(\w+);").unwrap();
-        let trait_regex = Regex::new(r"^(?:pub\s+)?trait\s+(\w+)").unwrap();
-        let enum_regex = Regex::new(r"^(?:pub\s+)?enum\s+(\w+)").unwrap();
+        let _trait_regex = Regex::new(r"^(?:pub\s+)?trait\s+(\w+)").unwrap();
+        let _enum_regex = Regex::new(r"^(?:pub\s+)?enum\s+(\w+)").unwrap();
         
         let mut current_block: Option<SemanticBlock> = None;
         let mut brace_count = 0;

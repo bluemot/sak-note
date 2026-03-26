@@ -1,14 +1,12 @@
 pub mod chunk;
 
-use std::collections::HashMap;
-use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, RwLock};
+use std::path::Path;
+use std::sync::{Arc, RwLock};
 use once_cell::sync::Lazy;
 use dashmap::DashMap;
 
 pub use chunk::{
-    Chunk, ChunkManager, EditableFileManager, EditOp, BatchEdit, 
-    SearchEngine, SearchResult, CHUNK_SIZE, SEARCH_BUFFER_SIZE
+    ChunkManager, EditableFileManager, EditOp, CHUNK_SIZE
 };
 
 /// Global file handle cache
@@ -22,6 +20,7 @@ pub struct FileEngine;
 
 impl FileEngine {
     /// Open a file and create chunk manager
+    #[allow(dead_code)]
     pub fn open_file<P: AsRef<Path>>(path: P) -> Result<Arc<ChunkManager>, std::io::Error> {
         let path_str = path.as_ref().to_string_lossy().to_string();
         
@@ -94,6 +93,7 @@ impl FileEngine {
     }
     
     /// Clear all cached files
+    #[allow(dead_code)]
     pub fn clear_cache() {
         FILE_CACHE.clear();
         EDITABLE_CACHE.clear();

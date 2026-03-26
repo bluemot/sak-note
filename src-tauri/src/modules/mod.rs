@@ -2,6 +2,8 @@
 //! 
 //! Each module exposes JSON interfaces for LLM and internal use.
 
+#![allow(dead_code)]
+
 pub mod file_module;
 pub mod marks_module;
 pub mod llm_module;

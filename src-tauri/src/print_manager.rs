@@ -3,7 +3,6 @@
 //! Handles printing document content
 
 use serde::{Serialize, Deserialize};
-use std::io::Write;
 use std::process::Command;
 
 #[derive(Debug, Serialize, Deserialize)]

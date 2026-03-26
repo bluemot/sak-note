@@ -1,8 +1,10 @@
+#![allow(dead_code)]
+
 use serde::{Serialize, Deserialize};
 use std::fs::{File, OpenOptions};
-use std::io::{self, Read, Write, Seek, SeekFrom};
+use std::io::{self, Read, Write};
 use std::path::Path;
-use crate::mark_engine::{Mark, MarkColor};
+use crate::mark_engine::Mark;
 
 /// SAK file format - Human-readable JSON-based marks storage
 /// 

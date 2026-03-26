@@ -2,6 +2,8 @@
 //!
 //! Manages chat history and context for code understanding
 
+#![allow(dead_code)]
+
 use serde::{Serialize, Deserialize};
 use std::collections::HashMap;
 use std::time::SystemTime;

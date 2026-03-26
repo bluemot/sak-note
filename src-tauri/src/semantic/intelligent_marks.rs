@@ -3,10 +3,12 @@
 //! LLM analyzes code and automatically adds color highlights
 //! Then controls the editor to navigate and display them
 
+#![allow(dead_code)]
+
 use serde::{Deserialize, Serialize};
 use crate::semantic::SemanticDocument;
 use crate::semantic::blocks::{BlockType, SemanticBlock};
-use crate::mark_engine::{MarkColor, Mark, MarkUpdate};
+use crate::mark_engine::{MarkColor, Mark};
 
 /// Importance level for code elements
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
