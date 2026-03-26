@@ -52,6 +52,15 @@ impl MCPServer {
         handlers::register_default_handlers(self);
     }
 
+    /// Register a handler for a tool
+    pub fn register_handler(
+        &mut self,
+        tool_name: &str,
+        handler: Box<dyn ToolHandler>,
+    ) {
+        self.handlers.insert(tool_name.to_string(), handler);
+    }
+
     /// List all available tools for LLM discovery
     pub fn list_tools(&self) -> Vec<&Tool> {
         self.registry.list()

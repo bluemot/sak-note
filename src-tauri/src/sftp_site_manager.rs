@@ -8,6 +8,8 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use crate::modular::ModuleError;
+use base64::{Engine as _, engine::general_purpose};
+use dirs;
 
 /// A saved SFTP site configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -142,10 +144,10 @@ impl SiteManager {
         }
 
         let content = fs::read_to_string(&path)
-            .map_err(|e| ModuleError::ExecutionFailed(format!("Failed to read sites: {}", e)))?;
+            .map_err(|e| ModuleError::new("read_failed", &format!("Failed to read sites: {}", e)))?;
         
         let manager: SiteManager = serde_json::from_str(&content)
-            .map_err(|e| ModuleError::ExecutionFailed(format!("Failed to parse sites: {}", e)))?;
+            .map_err(|e| ModuleError::new("parse_failed", &format!("Failed to parse sites: {}", e)))?;
         
         Ok(manager)
     }
@@ -157,14 +159,14 @@ impl SiteManager {
         // Ensure directory exists
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)
-                .map_err(|e| ModuleError::ExecutionFailed(format!("Failed to create directory: {}", e)))?;
+                .map_err(|e| ModuleError::new("execution_failed", &format!("Failed to create directory: {}", e)))?;
         }
 
         let json = serde_json::to_string_pretty(self)
-            .map_err(|e| ModuleError::ExecutionFailed(format!("Failed to serialize: {}", e)))?;
+            .map_err(|e| ModuleError::new("execution_failed", &format!("Failed to serialize: {}", e)))?;
         
         fs::write(&path, json)
-            .map_err(|e| ModuleError::ExecutionFailed(format!("Failed to write sites: {}", e)))?;
+            .map_err(|e| ModuleError::new("execution_failed", &format!("Failed to write sites: {}", e)))?;
         
         Ok(())
     }
@@ -172,7 +174,7 @@ impl SiteManager {
     /// Add a new site
     pub fn add_site(&mut self, site: SftpSite) -> Result<(), ModuleError> {
         if self.sites.contains_key(&site.id) {
-            return Err(ModuleError::ExecutionFailed(format!("Site '{}' already exists", site.id)));
+            return Err(ModuleError::new("execution_failed", &format!("Site '{}' already exists", site.id)));
         }
         
         // Add group if new
@@ -190,7 +192,7 @@ impl SiteManager {
     /// Update existing site
     pub fn update_site(&mut self, site: SftpSite) -> Result<(), ModuleError> {
         if !self.sites.contains_key(&site.id) {
-            return Err(ModuleError::ExecutionFailed(format!("Site '{}' not found", site.id)));
+            return Err(ModuleError::new("execution_failed", &format!("Site '{}' not found", site.id)));
         }
         
         self.sites.insert(site.id.clone(), site);
@@ -201,7 +203,7 @@ impl SiteManager {
     /// Remove a site
     pub fn remove_site(&mut self, site_id: &str) -> Result<(), ModuleError> {
         if self.sites.remove(site_id).is_none() {
-            return Err(ModuleError::ExecutionFailed(format!("Site '{}' not found", site_id)));
+            return Err(ModuleError::new("execution_failed", &format!("Site '{}' not found", site_id)));
         }
         self.save()?;
         Ok(())
@@ -274,10 +276,10 @@ impl SiteManager {
     /// Import sites from file
     pub fn import_from_file(&mut self, path: &str) -> Result<usize, ModuleError> {
         let content = fs::read_to_string(path)
-            .map_err(|e| ModuleError::ExecutionFailed(format!("Failed to read import file: {}", e)))?;
+            .map_err(|e| ModuleError::new("execution_failed", &format!("Failed to read import file: {}", e)))?;
         
         let imported: SiteManager = serde_json::from_str(&content)
-            .map_err(|e| ModuleError::ExecutionFailed(format!("Failed to parse import: {}", e)))?;
+            .map_err(|e| ModuleError::new("execution_failed", &format!("Failed to parse import: {}", e)))?;
         
         let count = imported.sites.len();
         for (id, site) in imported.sites {
@@ -291,10 +293,10 @@ impl SiteManager {
     /// Export sites to file
     pub fn export_to_file(&self, path: &str) -> Result<(), ModuleError> {
         let json = serde_json::to_string_pretty(self)
-            .map_err(|e| ModuleError::ExecutionFailed(format!("Failed to serialize: {}", e)))?;
+            .map_err(|e| ModuleError::new("execution_failed", &format!("Failed to serialize: {}", e)))?;
         
         fs::write(path, json)
-            .map_err(|e| ModuleError::ExecutionFailed(format!("Failed to write export: {}", e)))?;
+            .map_err(|e| ModuleError::new("execution_failed", &format!("Failed to write export: {}", e)))?;
         
         Ok(())
     }
@@ -302,7 +304,7 @@ impl SiteManager {
     /// Duplicate a site
     pub fn duplicate_site(&mut self, site_id: &str, new_name: impl Into<String>) -> Result<String, ModuleError> {
         let site = self.sites.get(site_id)
-            .ok_or_else(|| ModuleError::ExecutionFailed(format!("Site '{}' not found", site_id)))?;
+            .ok_or_else(|| ModuleError::new("execution_failed", &format!("Site '{}' not found", site_id)))?;
         
         let mut new_site = site.clone();
         new_site.id = uuid::Uuid::new_v4().to_string();
@@ -330,7 +332,7 @@ impl SiteManager {
         
         match result {
             Ok(_) => Ok(true),
-            Err(e) => Err(ModuleError::ExecutionFailed(format!("Connection failed: {}", e))),
+            Err(e) => Err(ModuleError::new("execution_failed", &format!("Connection failed: {}", e))),
         }
     }
 }

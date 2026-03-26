@@ -1,7 +1,4 @@
-use tauri::{Manager, State};
-use std::sync::Arc;
 use serde::{Serialize, Deserialize};
-use std::sync::RwLock;
 
 mod file_engine;
 mod mark_engine;
@@ -22,10 +19,14 @@ mod session_manager;
 mod print_manager;
 mod find_in_files;
 
-use file_engine::{FileEngine, ChunkManager, EditableFileManager, EditOp, SearchEngine, SearchResult, FileInfo, CHUNK_SIZE};
+use bookmark_commands::{bookmark_toggle, bookmark_get_all, bookmark_next, bookmark_prev, bookmark_remove, bookmark_clear, bookmark_update_label};
+use sftp_commands::{sftp_list_sites, sftp_add_site, sftp_update_site, sftp_remove_site, sftp_connect_site, sftp_test_connection};
+use ui_commands::{ui_goto_line, ui_get_editor_state, ui_execute_line_operation, ui_execute_text_operation};
+
+use file_engine::{FileEngine, EditOp, FileInfo, CHUNK_SIZE};
 use mark_engine::{MarkEngine, MarkColor, Mark, MarkUpdate, MarkExport};
-use sak_format::{SakFile, SakInfo, convert_to_sak, convert_from_sak};
-use modular::{ModuleRequest, ModuleResponse, process_request};
+use sak_format::{SakFile, SakInfo};
+use modular::{ModuleRequest, ModuleResponse};
 
 // ============== Request/Response Types ==============
 

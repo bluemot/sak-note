@@ -210,7 +210,7 @@ impl<'a> QueryEngine<'a> {
 
     fn calculate_relevance(&self, block: &SemanticBlock, query: &str) -> f32 {
         let query_lower = query.to_lowercase();
-        let mut score = 0.0;
+        let mut score: f32 = 0.0;
         
         // Name match is highest priority
         if block.name.to_lowercase().contains(&query_lower) {
@@ -244,7 +244,8 @@ impl<'a> QueryEngine<'a> {
             score += 0.3;
         }
         
-        score.min(1.0)
+        score = score.min(1.0);
+        score
     }
 
     fn generate_match_reason(&self, block: &SemanticBlock, query: &str) -> String {

@@ -32,7 +32,7 @@ impl FindInFiles {
     pub fn search(options: FindInFilesOptions) -> Result<Vec<SearchResult>, Box<dyn std::error::Error>> {
         let mut results = vec![];
         
-        let dir = options.directory.unwrap_or_else(|| ".".to_string());
+        let dir = options.directory.clone().unwrap_or_else(|| ".".to_string());
         
         // Parse filters
         let filters: Vec<&str> = options.filters

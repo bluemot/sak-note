@@ -17,7 +17,7 @@ interface TabsProps {
   onTabReorder?: (dragId: string, dropId: string) => void
 }
 
-export function Tabs({ tabs, activeTabId, onTabClick, onTabClose, onTabReorder }: TabsProps) {
+export function Tabs({ tabs, activeTabId: _activeTabId, onTabClick, onTabClose, onTabReorder }: TabsProps) {
   const [draggedTab, setDraggedTab] = useState<string | null>(null)
 
   const handleDragStart = useCallback((e: React.DragEvent, tabId: string) => {

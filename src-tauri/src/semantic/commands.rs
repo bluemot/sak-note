@@ -2,16 +2,14 @@
 //!
 //! Exposes LLM-friendly operations to the frontend
 
-use tauri::State;
 use serde_json::Value;
 use crate::semantic::{SemanticDocument, SemanticEdit};
-use crate::semantic::blocks::{BlockId, SemanticBlock};
+use crate::semantic::blocks::BlockId;
 use crate::semantic::parser::CodeParser;
 use crate::semantic::query::QueryEngine;
-use crate::semantic::bridge::{LLMBridge, LLMEditParser, LLMFormat};
-use crate::semantic::intelligent_marks::{IntelligentMarkEngine, ApplyIntelligentMarksCommand, ApplyIntelligentMarksResult, NavigationTarget};
-use crate::vfs::manager::VfsManager;
-use std::sync::{Arc, Mutex};
+use crate::semantic::bridge::{LLMBridge, LLMEditParser};
+use crate::semantic::conversation::{Conversation, ConversationManager, ConversationMessage};
+use std::sync::Mutex;
 use lazy_static::lazy_static;
 
 /// Global conversation manager
@@ -244,10 +242,6 @@ pub fn semantic_conversation_send(
 ) -> Result<Value, String> {
     let mut manager = CONVERSATION_MANAGER.lock().unwrap();
     
-    let conversation = manager
-        .get_conversation(&conversation_id)
-        .ok_or("Conversation not found")?;
-    
     // Parse file context if provided
     let context = if let Some(path) = file_context {
         let content = std::fs::read_to_string(&path).ok();
@@ -257,15 +251,21 @@ pub fn semantic_conversation_send(
         None
     };
     
+    // Generate response based on message first (borrows manager)
+    let response = generate_llm_response(&message, context.as_ref());
+    let suggestions = generate_suggestions(&message);
+    
+    // Now add messages - need mutable access
+    let conversation = manager
+        .get_conversation_mut(&conversation_id)
+        .ok_or("Conversation not found")?;
+    
     // Add user message
     conversation.add_message(ConversationMessage {
         role: "user".to_string(),
         content: message.clone(),
         timestamp: std::time::SystemTime::now(),
     });
-    
-    // Generate response based on message
-    let response = generate_llm_response(&message, context.as_ref());
     
     // Add assistant message
     conversation.add_message(ConversationMessage {
@@ -277,7 +277,7 @@ pub fn semantic_conversation_send(
     Ok(serde_json::json!({
         "conversation_id": conversation_id,
         "response": response,
-        "suggestions": generate_suggestions(&message),
+        "suggestions": suggestions,
     }))
 }
 
@@ -286,17 +286,20 @@ pub fn semantic_conversation_send(
 pub fn semantic_conversation_history(conversation_id: String) -> Result<Value, String> {
     let manager = CONVERSATION_MANAGER.lock().unwrap();
     
-    let conversation = manager
+    let messages: Vec<serde_json::Value> = manager
         .get_conversation(&conversation_id)
-        .ok_or("Conversation not found")?;
-    
-    Ok(serde_json::json!({
-        "messages": conversation.messages.iter().map(|m| {
+        .ok_or("Conversation not found")?
+        .messages
+        .iter()
+        .map(|m| {
             serde_json::json!({
                 "role": m.role,
                 "content": m.content,
             })
-        }).collect::<Vec<_>>(),
+        }).collect();
+    
+    Ok(serde_json::json!({
+        "messages": messages,
     }))
 }
 

@@ -251,7 +251,7 @@ impl LLMEditParser {
 
     fn parse_add_import(request: &str) -> Result<LLMEditRequest, String> {
         // Pattern: "import X from Y"
-        let re = regex::Regex::new(r"import\s+(.+)\s+from\s+['\"]?(.+?)['\"]?").unwrap();
+        let re = regex::Regex::new(r#"import\s+(.+)\s+from\s+['"'](.+)['"']"#).unwrap();
         
         if let Some(cap) = re.captures(request) {
             Ok(LLMEditRequest {

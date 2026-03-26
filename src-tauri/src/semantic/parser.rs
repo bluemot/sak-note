@@ -206,7 +206,7 @@ impl TypeScriptParser {
         let lines: Vec<&str> = content.lines().collect();
         
         // Regex patterns
-        let import_regex = Regex::new(r"^import\s+(.+)\s+from\s+['\"](.+)['\"];?").unwrap();
+        let import_regex = Regex::new(r#"^import\s+(.+)\s+from\s+['"](.+)['"];?"#).unwrap();
         let fn_regex = Regex::new(r"^(?:export\s+)?(?:async\s+)?(?:function|const|let)\s+(\w+)\s*(?:=|:)?\s*(?:\([^)]*\)|async\s*\([^)]*\))\s*=>").unwrap();
         let class_regex = Regex::new(r"^(?:export\s+)?class\s+(\w+)").unwrap();
         let interface_regex = Regex::new(r"^(?:export\s+)?interface\s+(\w+)").unwrap();
@@ -329,7 +329,7 @@ impl PythonParser {
             
             // Detect imports
             if let Some(cap) = import_regex.captures(trimmed) {
-                let module = cap.get(1).map(|m| m.as_str()).unwrap_or("")
+                let module = cap.get(1).map(|m| m.as_str()).unwrap_or("").to_string();
                 let names = &cap[2];
                 
                 let block = SemanticBlock::new(

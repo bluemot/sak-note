@@ -15,7 +15,7 @@ lazy_static! {
 #[tauri::command]
 pub fn bookmark_toggle(path: String, line: u32) -> Result<Value, String> {
     let mut manager = BOOKMARK_MANAGER.lock().map_err(|e| e.to_string())?;
-    let added = manager.toggle(&path, line as usize)
+    let added = manager.toggle(&path, line)
         .map_err(|e| e.to_string())?;
     
     Ok(serde_json::json!({
@@ -46,7 +46,7 @@ pub fn bookmark_get_all(path: String) -> Result<Value, String> {
 #[tauri::command]
 pub fn bookmark_next(path: String, current_line: u32) -> Result<Value, String> {
     let mut manager = BOOKMARK_MANAGER.lock().map_err(|e| e.to_string())?;
-    let bookmark = manager.next(&path, current_line as usize)
+    let bookmark = manager.next(&path, current_line)
         .map_err(|e| e.to_string())?;
     
     Ok(serde_json::json!({
@@ -58,7 +58,7 @@ pub fn bookmark_next(path: String, current_line: u32) -> Result<Value, String> {
 #[tauri::command]
 pub fn bookmark_prev(path: String, current_line: u32) -> Result<Value, String> {
     let mut manager = BOOKMARK_MANAGER.lock().map_err(|e| e.to_string())?;
-    let bookmark = manager.prev(&path, current_line as usize)
+    let bookmark = manager.prev(&path, current_line)
         .map_err(|e| e.to_string())?;
     
     Ok(serde_json::json!({
@@ -70,7 +70,7 @@ pub fn bookmark_prev(path: String, current_line: u32) -> Result<Value, String> {
 #[tauri::command]
 pub fn bookmark_remove(path: String, line: u32) -> Result<Value, String> {
     let mut manager = BOOKMARK_MANAGER.lock().map_err(|e| e.to_string())?;
-    let removed = manager.remove(&path, line as usize)
+    let removed = manager.remove(&path, line)
         .map_err(|e| e.to_string())?;
     
     Ok(serde_json::json!({
@@ -93,7 +93,7 @@ pub fn bookmark_clear(path: String) -> Result<Value, String> {
 #[tauri::command]
 pub fn bookmark_update_label(path: String, line: u32, label: String) -> Result<Value, String> {
     let mut manager = BOOKMARK_MANAGER.lock().map_err(|e| e.to_string())?;
-    let updated = manager.update_label(&path, line as usize, label)
+    let updated = manager.update_label(&path, line, label)
         .map_err(|e| e.to_string())?;
     
     Ok(serde_json::json!({

@@ -28,7 +28,15 @@
  * }
  */
 
-import { ComponentType, LazyExoticComponent, lazy } from 'react'
+import { ComponentType, LazyExoticComponent, lazy, useState, useEffect, useCallback } from 'react'
+
+declare global {
+  interface Window {
+    __TAURI__?: {
+      invoke: (cmd: string, args?: Record<string, unknown>) => Promise<unknown>
+    }
+  }
+}
 
 // UI Slot definitions - where components can be placed
 export type UISlot = 

@@ -9,7 +9,7 @@ use crate::modules::llm_module::LlmModule;
 use crate::modules::sftp_module::SftpModule;
 use crate::modules::marks_module::MarksModule;
 use crate::semantic::intelligent_marks::{IntelligentMarkEngine, ApplyIntelligentMarksResult, NavigationTarget};
-use crate::semantic::blocks::SemanticDocument;
+use crate::semantic::SemanticDocument;
 use crate::semantic::parser::CodeParser;
 use crate::semantic::query::QueryEngine;
 use crate::semantic::bridge::LLMBridge;

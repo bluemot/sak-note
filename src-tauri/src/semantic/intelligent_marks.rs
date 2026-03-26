@@ -239,14 +239,14 @@ impl IntelligentMarkEngine {
     /// Convert analysis to editor marks
     pub fn to_editor_marks(analysis: &CodeAnalysis) -> Vec<Mark> {
         analysis.marked_sections.iter().map(|section| {
-            Mark {
-                line: section.line_start as u32,
-                color: section.importance.to_mark_color(),
-                label: Some(format!("{}: {}", 
-                    section.importance.to_mark_color().to_string(),
-                    section.reason
-                )),
-            }
+            Mark::new(
+                section.line_start,
+                section.line_end,
+                section.importance.to_mark_color(),
+            ).with_label(format!("{}: {}", 
+                section.importance.to_mark_color(),
+                section.reason
+            ))
         }).collect()
     }
 }

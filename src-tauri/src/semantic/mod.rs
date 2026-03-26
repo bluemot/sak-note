@@ -10,6 +10,9 @@ pub mod blocks;
 pub mod parser;
 pub mod query;
 pub mod bridge;
+pub mod commands;
+pub mod intelligent_marks;
+pub mod conversation;
 
 pub use blocks::{SemanticBlock, BlockType, BlockId, Location};
 pub use parser::{CodeParser, ParseResult};

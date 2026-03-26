@@ -273,10 +273,11 @@ impl BlockParser for TextParser {
         
         // Add remaining block
         if !current_block.trim().is_empty() {
+            let start_line = line_num - current_block.lines().count();
             let block = SemanticBlock::new(
                 BlockType::Block,
                 current_block
-            ).with_location(Location::new(line_num - current_block.lines().count(), 1));
+            ).with_location(Location::new(start_line, 1));
             blocks.push(block);
         }
         

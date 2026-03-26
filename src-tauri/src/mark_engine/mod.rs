@@ -86,6 +86,12 @@ impl MarkColor {
     }
 }
 
+impl std::fmt::Display for MarkColor {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
 impl Default for MarkColor {
     fn default() -> Self {
         MarkColor::Red
