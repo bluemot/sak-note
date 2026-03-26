@@ -1,0 +1,218 @@
+.find-replace-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 100px;
+  z-index: 1000;
+}
+
+.find-replace-dialog {
+  background: var(--surface-0);
+  border: 1px solid var(--surface-2);
+  border-radius: 8px;
+  width: 500px;
+  max-width: 90vw;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+.find-replace-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--surface-1);
+}
+
+.find-replace-tabs {
+  display: flex;
+  gap: 8px;
+}
+
+.find-replace-tabs .tab {
+  padding: 6px 16px;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background 0.15s;
+}
+
+.find-replace-tabs .tab:hover {
+  background: var(--surface-1);
+}
+
+.find-replace-tabs .tab.active {
+  background: var(--blue);
+  color: var(--base);
+}
+
+.close-btn {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--overlay-0);
+  font-size: 20px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background 0.15s, color 0.15s;
+}
+
+.close-btn:hover {
+  background: var(--red);
+  color: var(--base);
+}
+
+.find-replace-body {
+  padding: 16px;
+}
+
+.input-group {
+  margin-bottom: 12px;
+}
+
+.input-group label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 12px;
+  color: var(--overlay-0);
+  font-weight: 500;
+}
+
+.input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.input-wrapper input {
+  flex: 1;
+  padding: 8px 12px;
+  background: var(--surface-1);
+  border: 1px solid var(--surface-2);
+  border-radius: 4px;
+  color: var(--text);
+  font-size: 13px;
+}
+
+.input-wrapper input:focus {
+  outline: none;
+  border-color: var(--blue);
+}
+
+.match-count {
+  position: absolute;
+  right: 12px;
+  font-size: 11px;
+  color: var(--overlay-0);
+  pointer-events: none;
+}
+
+.options-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 12px;
+}
+
+.checkbox {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.checkbox input {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--blue);
+}
+
+.find-replace-footer {
+  display: flex;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--surface-1);
+  justify-content: flex-end;
+}
+
+.find-replace-footer button {
+  padding: 8px 16px;
+  background: var(--surface-1);
+  border: 1px solid var(--surface-2);
+  border-radius: 4px;
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.find-replace-footer button:hover:not(:disabled) {
+  background: var(--surface-2);
+}
+
+.find-replace-footer button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.find-replace-footer button:first-of-type {
+  background: var(--blue);
+  color: var(--base);
+  border-color: var(--blue);
+}
+
+.find-replace-footer button:first-of-type:hover:not(:disabled) {
+  background: var(--sapphire);
+}
+
+/* Regex help tooltip */
+.regex-help {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: var(--surface-1);
+  border: 1px solid var(--surface-2);
+  border-radius: 4px;
+  padding: 12px;
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--overlay-0);
+  z-index: 10;
+}
+
+.regex-help h4 {
+  margin: 0 0 8px 0;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.regex-help table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.regex-help td {
+  padding: 2px 8px;
+}
+
+.regex-help code {
+  background: var(--surface-0);
+  padding: 1px 4px;
+  border-radius: 2px;
+  font-family: monospace;
+}
