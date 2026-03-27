@@ -38,16 +38,20 @@ struct ChunkInfo {
 #[allow(dead_code)]
 impl ChunkManager {
     pub fn new<P: AsRef<Path>>(path: P) -> io::Result<Self> {
+        log::debug!("[ChunkManager::new] Opening file for memory mapping...");
         let file = File::open(&path)?;
         let metadata = file.metadata()?;
         let file_size = metadata.len();
+        log::debug!("[ChunkManager::new] File opened: size={} bytes", file_size);
 
         // Memory map the file
         let mmap = unsafe { Mmap::map(&file)? };
+        log::debug!("[ChunkManager::new] File memory mapped successfully");
 
         // Calculate chunks
         let num_chunks = ((file_size + CHUNK_SIZE as u64 - 1) / CHUNK_SIZE as u64) as usize;
         let mut chunks = Vec::with_capacity(num_chunks);
+        log::debug!("[ChunkManager::new] Calculating {} chunks with size {} bytes", num_chunks, CHUNK_SIZE);
 
         for i in 0..num_chunks {
             let offset = i * CHUNK_SIZE;
@@ -58,6 +62,8 @@ impl ChunkManager {
             };
             chunks.push(ChunkInfo { offset, length });
         }
+        log::info!("[ChunkManager::new] ChunkManager created: path={:?}, size={}, chunks={}", 
+            path.as_ref(), file_size, num_chunks);
 
         Ok(ChunkManager {
             file_path: path.as_ref().to_string_lossy().to_string(),
@@ -72,36 +78,65 @@ impl ChunkManager {
     pub fn file_path(&self) -> &str { &self.file_path }
 
     pub fn get_chunk(&self, chunk_id: usize) -> Option<Chunk> {
-        if chunk_id >= self.chunks.len() { return None; }
+        log::debug!("[ChunkManager::get_chunk] Requesting chunk_id={}", chunk_id);
+        if chunk_id >= self.chunks.len() { 
+            log::warn!("[ChunkManager::get_chunk] Chunk {} out of bounds (total chunks: {})", 
+                chunk_id, self.chunks.len());
+            return None; 
+        }
         let info = &self.chunks[chunk_id];
         if let Some(ref mmap) = self.mmap {
             let data = mmap[info.offset..info.offset + info.length].to_vec();
+            log::debug!("[ChunkManager::get_chunk] Chunk {} retrieved: offset={}, length={}", 
+                chunk_id, info.offset, info.length);
             Some(Chunk { id: chunk_id, offset: info.offset, length: info.length, data })
-        } else { None }
+        } else { 
+            log::error!("[ChunkManager::get_chunk] No memory map available");
+            None 
+        }
     }
 
     pub fn get_text_range(&self, start: usize, end: usize) -> Option<String> {
+        log::debug!("[ChunkManager::get_text_range] start={}, end={}", start, end);
         if let Some(ref mmap) = self.mmap {
             let end = end.min(self.file_size as usize);
             let bytes = &mmap[start..end];
-            Some(String::from_utf8_lossy(bytes).to_string())
-        } else { None }
+            let text = String::from_utf8_lossy(bytes).to_string();
+            log::debug!("[ChunkManager::get_text_range] Retrieved {} bytes as text", text.len());
+            Some(text)
+        } else { 
+            log::error!("[ChunkManager::get_text_range] No memory map available");
+            None 
+        }
     }
 
     pub fn get_bytes(&self, start: usize, length: usize) -> Option<Vec<u8>> {
+        log::debug!("[ChunkManager::get_bytes] start={}, length={}", start, length);
         if let Some(ref mmap) = self.mmap {
             let end = (start + length).min(self.file_size as usize);
-            Some(mmap[start..end].to_vec())
-        } else { None }
+            let data = mmap[start..end].to_vec();
+            log::debug!("[ChunkManager::get_bytes] Retrieved {} bytes", data.len());
+            Some(data)
+        } else { 
+            log::error!("[ChunkManager::get_bytes] No memory map available");
+            None 
+        }
     }
 
     pub fn get_byte(&self, position: usize) -> Option<u8> {
+        log::debug!("[ChunkManager::get_byte] position={}", position);
         if let Some(ref mmap) = self.mmap {
-            mmap.get(position).copied()
-        } else { None }
+            let byte = mmap.get(position).copied();
+            log::debug!("[ChunkManager::get_byte] Byte at position {}: {:?}", position, byte);
+            byte
+        } else { 
+            log::error!("[ChunkManager::get_byte] No memory map available");
+            None 
+        }
     }
 
     pub fn get_hex_range(&self, start: usize, length: usize) -> Vec<(usize, Vec<u8>)> {
+        log::debug!("[ChunkManager::get_hex_range] start={}, length={}", start, length);
         let mut result = Vec::new();
         if let Some(ref mmap) = self.mmap {
             let end = (start + length).min(self.file_size as usize);
@@ -116,6 +151,7 @@ impl ChunkManager {
                 }
             }
         }
+        log::debug!("[ChunkManager::get_hex_range] Retrieved {} hex rows", result.len());
         result
     }
 }
@@ -144,10 +180,17 @@ pub struct EditableFileManager {
 
 impl EditableFileManager {
     pub fn new<P: AsRef<Path>>(path: P) -> io::Result<Self> {
+        log::info!("[EditableFileManager::new] Opening file for editing: {:?}", path.as_ref());
         let file = File::open(&path)?;
         let metadata = file.metadata()?;
         let file_size = metadata.len();
+        log::info!("[EditableFileManager::new] File opened: size={} bytes", file_size);
+        
         let mmap = unsafe { Mmap::map(&file)? };
+        log::debug!("[EditableFileManager::new] File memory mapped successfully");
+
+        log::info!("[EditableFileManager::new] EditableFileManager created: path={:?}, size={}", 
+            path.as_ref(), file_size);
 
         Ok(EditableFileManager {
             file_path: path.as_ref().to_path_buf(),
@@ -179,11 +222,15 @@ impl EditableFileManager {
                 }
             }
         }
-        size.max(0) as u64
+        let result = size.max(0) as u64;
+        log::trace!("[EditableFileManager::effective_size] Original: {}, Effective: {}", 
+            self.file_size, result);
+        result
     }
 
     /// Apply edit operation
     pub fn apply_edit(&mut self, op: EditOp) {
+        log::debug!("[EditableFileManager::apply_edit] Applying edit: {:?}", op);
         // Remove any redo history
         if self.history_position < self.edit_history.len() {
             self.edit_history.truncate(self.history_position);
@@ -206,6 +253,8 @@ impl EditableFileManager {
                 self.modified_regions.insert(*offset, data.len());
             }
         }
+        log::debug!("[EditableFileManager::apply_edit] Edit applied. History position: {}/{}, has_changes: {}", 
+            self.history_position, self.edit_history.len(), self.has_changes);
     }
 
     #[allow(dead_code)]
@@ -219,6 +268,7 @@ impl EditableFileManager {
 
     /// Get range of bytes (considering edits)
     pub fn get_range(&self, start: usize, length: usize) -> Vec<u8> {
+        log::debug!("[EditableFileManager::get_range] start={}, length={}", start, length);
         // Apply edits to get the logical view
         let mut result = Vec::with_capacity(length);
         let end = start + length;
@@ -301,17 +351,24 @@ impl EditableFileManager {
             edit_index += 1;
         }
 
+        log::debug!("[EditableFileManager::get_range] Returning {} bytes", result.len());
         result
     }
 
     /// Get text range (considering edits)
     pub fn get_text(&self, start: usize, length: usize) -> String {
+        log::debug!("[EditableFileManager::get_text] start={}, length={}", start, length);
         let bytes = self.get_range(start, length);
-        String::from_utf8_lossy(&bytes).to_string()
+        let text = String::from_utf8_lossy(&bytes).to_string();
+        log::debug!("[EditableFileManager::get_text] Converted {} bytes to {} chars", 
+            bytes.len(), text.chars().count());
+        text
     }
 
     /// Search for pattern in file (including uncommitted edits)
     pub fn search(&self, pattern: &[u8], start_offset: usize) -> Vec<usize> {
+        log::debug!("[EditableFileManager::search] pattern.len={}, start_offset={}", 
+            pattern.len(), start_offset);
         let mut results = Vec::new();
         if pattern.is_empty() { return results; }
 
@@ -321,10 +378,12 @@ impl EditableFileManager {
         // For small files or few edits, build virtual view and search
         // For large files with many edits, use optimized approach
         if effective_size < SEARCH_BUFFER_SIZE || self.history_position == 0 {
+            log::debug!("[EditableFileManager::search] Using full buffer search (size={})", effective_size);
             // Build virtual buffer and search
             let virtual_content = self.get_range(0, effective_size);
             results = self.search_in_slice(&virtual_content, pattern, start_offset);
         } else {
+            log::debug!("[EditableFileManager::search] Using chunked search");
             // Chunked search for large files
             let mut search_offset = start_offset;
             while search_offset < effective_size {
@@ -354,7 +413,7 @@ impl EditableFileManager {
                 }
             }
         }
-
+        log::debug!("[EditableFileManager::search] Found {} matches", results.len());
         results
     }
 
@@ -404,6 +463,7 @@ impl EditableFileManager {
     pub fn replace_all(&mut self, pattern: &[u8], replacement: &[u8]) -> usize {
         let matches = self.search_all(pattern);
         let count = matches.len();
+        log::info!("[EditableFileManager::replace_all] Found {} matches to replace", count);
 
         // Apply replacements in reverse order to maintain offsets
         for &offset in matches.iter().rev() {
@@ -421,26 +481,37 @@ impl EditableFileManager {
     pub fn undo(&mut self) -> bool {
         if self.history_position > 0 {
             self.history_position -= 1;
+            log::debug!("[EditableFileManager::undo] Undo performed. New position: {}", self.history_position);
             true
-        } else { false }
+        } else { 
+            log::debug!("[EditableFileManager::undo] Cannot undo - at beginning of history");
+            false 
+        }
     }
 
     /// Redo last undone operation
     pub fn redo(&mut self) -> bool {
         if self.history_position < self.edit_history.len() {
             self.history_position += 1;
+            log::debug!("[EditableFileManager::redo] Redo performed. New position: {}", self.history_position);
             true
-        } else { false }
+        } else { 
+            log::debug!("[EditableFileManager::redo] Cannot redo - at end of history");
+            false 
+        }
     }
 
     /// Save changes to disk
     pub fn save(&mut self) -> io::Result<()> {
+        log::info!("[EditableFileManager::save] Starting save operation...");
         if !self.has_changes || self.edit_history.is_empty() {
+            log::info!("[EditableFileManager::save] No changes to save");
             return Ok(());
         }
 
         // Create temp file
         let temp_path = self.file_path.with_extension("tmp");
+        log::debug!("[EditableFileManager::save] Creating temp file: {:?}", temp_path);
         let temp_file = OpenOptions::new()
             .write(true)
             .create(true)
@@ -458,6 +529,8 @@ impl EditableFileManager {
             sorted_edits.sort_by_key(|op| match op {
                 EditOp::Insert { offset, .. } | EditOp::Delete { offset, .. } | EditOp::Replace { offset, .. } => *offset,
             });
+
+            log::debug!("[EditableFileManager::save] Applying {} edits", sorted_edits.len());
 
             // Write with edits applied
             for op in sorted_edits {
@@ -500,27 +573,32 @@ impl EditableFileManager {
 
         writer.flush()?;
         drop(writer);
+        log::debug!("[EditableFileManager::save] Temp file written successfully");
 
         // Atomically replace original file
         std::fs::rename(&temp_path, &self.file_path)?;
+        log::info!("[EditableFileManager::save] File saved and replaced atomically");
 
         // Re-map the file
         let file = File::open(&self.file_path)?;
         let metadata = file.metadata()?;
         self.file_size = metadata.len();
         self.mmap = Some(unsafe { Mmap::map(&file)? });
+        log::debug!("[EditableFileManager::save] File re-mapped. New size: {} bytes", self.file_size);
 
         // Clear history
         self.edit_history.clear();
         self.history_position = 0;
         self.has_changes = false;
         self.modified_regions.clear();
+        log::info!("[EditableFileManager::save] Save operation completed successfully");
 
         Ok(())
     }
 
     /// Save as new file
     pub fn save_as<P: AsRef<Path>>(&self, new_path: P) -> io::Result<()> {
+        log::info!("[EditableFileManager::save_as] Saving to new path: {:?}", new_path.as_ref());
         let new_file = OpenOptions::new()
             .write(true)
             .create(true)
@@ -568,6 +646,7 @@ impl EditableFileManager {
         }
 
         writer.flush()?;
+        log::info!("[EditableFileManager::save_as] File saved successfully to new path");
         Ok(())
     }
 

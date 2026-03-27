@@ -275,39 +275,49 @@ async fn get_text(req: GetTextRequest) -> Result<String, String> {
     }
 }
 
+/// Get chunk command - retrieves a specific chunk from file
 #[tauri::command]
 async fn get_chunk(req: GetChunkRequest) -> Result<ChunkResponse, String> {
-    if let Some(manager) = FileEngine::get_editable(&req.path) {
-        let guard = manager.read().map_err(|e| format!("Lock error: {}", e))?;
-        let offset = req.chunk_id * CHUNK_SIZE;
-        let length = CHUNK_SIZE.min((guard.effective_size() as usize).saturating_sub(offset));
-        
-        if length == 0 {
-            return Err("Chunk out of bounds".to_string());
+    let start_time = std::time::Instant::now();
+    log::debug!("[lib::get_chunk] === GET CHUNK COMMAND STARTED ===");
+    log::debug!("[lib::get_chunk] Request: path={}, chunk_id={}", req.path, req.chunk_id);
+    
+    match FileEngine::get_editable(&req.path) {
+        Some(manager) => {
+            log::debug!("[lib::get_chunk] File manager found, acquiring read lock");
+            let guard = manager.read().map_err(|e| {
+                log::error!("[lib::get_chunk] Failed to acquire read lock: {}", e);
+                format!("Lock error: {}", e)
+            })?;
+            
+            let offset = req.chunk_id * CHUNK_SIZE;
+            let length = CHUNK_SIZE.min((guard.effective_size() as usize).saturating_sub(offset));
+            log::debug!("[lib::get_chunk] Calculated: offset={}, length={}", offset, length);
+            
+            if length == 0 {
+                log::warn!("[lib::get_chunk] Chunk out of bounds: chunk_id={}, offset={}", req.chunk_id, offset);
+                return Err("Chunk out of bounds".to_string());
+            }
+            
+            log::debug!("[lib::get_chunk] Calling get_range()");
+            let data = guard.get_range(offset, length);
+            let text = String::from_utf8_lossy(&data).to_string();
+            
+            let elapsed = start_time.elapsed();
+            log::debug!("[lib::get_chunk] Chunk retrieved: {} bytes in {:?}", data.len(), elapsed);
+            log::debug!("[lib::get_chunk] === GET CHUNK COMMAND COMPLETED ===");
+            
+            Ok(ChunkResponse {
+                id: req.chunk_id,
+                offset,
+                length,
+                text,
+            })
         }
-        
-        let data = guard.get_range(offset, length);
-        let text = String::from_utf8_lossy(&data).to_string();
-        
-        Ok(ChunkResponse {
-            id: req.chunk_id,
-            offset,
-            length,
-            text,
-        })
-    } else {
-        Err("File not open".to_string())
-    }
-}
-
-#[tauri::command]
-async fn get_text(req: GetTextRequest) -> Result<String, String> {
-    if let Some(manager) = FileEngine::get_editable(&req.path) {
-        let guard = manager.read().map_err(|e| format!("Lock error: {}", e))?;
-        let text = guard.get_text(req.start, req.end.saturating_sub(req.start));
-        Ok(text)
-    } else {
-        Err("File not open".to_string())
+        None => {
+            log::error!("[lib::get_chunk] File not open: {}", req.path);
+            Err("File not open".to_string())
+        }
     }
 }
 
@@ -655,6 +665,7 @@ pub fn run() {
     }
     
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             // File operations
             open_file,

@@ -12,6 +12,8 @@ export default defineConfig({
   },
   // Make Tauri work
   envPrefix: ['VITE_', 'TAURI_'],
+  // Ensure relative paths for Tauri WebView
+  base: './',
   build: {
     // Tauri supports es2021
     target: ['es2021', 'chrome100', 'safari13'],

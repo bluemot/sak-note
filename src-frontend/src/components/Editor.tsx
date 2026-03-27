@@ -24,7 +24,6 @@ function FileEditor({ filePath, fileSize }: EditorProps) {
 
   // Load initial chunks
   useEffect(() => {
-    const timestamp = new Date().toISOString()
     log(`[Editor::useEffect] === EDITOR CONTENT LOADING STARTED ===`)
     log(`[Editor::useEffect] filePath="${filePath}", fileSize=${fileSize}`)
     log(`[Editor::useEffect] chunkRange: start=${chunkRange.start}, end=${chunkRange.end}`)
@@ -92,8 +91,7 @@ function FileEditor({ filePath, fileSize }: EditorProps) {
   }, [filePath, fileSize, chunkRange])
 
   const handleEditorDidMount = useCallback((editor: any) => {
-    const timestamp = new Date().toISOString()
-    log(`[Editor::handleEditorDidMount] Monaco editor mounted at ${timestamp}`)
+    log(`[Editor::handleEditorDidMount] Monaco editor mounted`)
     
     editorRef.current = editor
     log(`[Editor::handleEditorDidMount] editorRef set`)

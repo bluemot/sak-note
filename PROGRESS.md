@@ -327,3 +327,61 @@ npm run test:e2e      # Run Playwright UI tests
 - Use streaming for file operations
 - Keep UI responsive with async operations
 - Testing follows 3-layer strategy: Rust unit → React component → E2E automation
+
+---
+
+### 2026-03-27 - WASM Plugin System + Debug Logging
+
+#### WASM Plugin System Complete
+- [x] **Plugin Runtime**: wasmtime 23 + WASI Preview 1
+  - [x] `wasm_engine.rs` - WASM execution with fuel/memory limits
+  - [x] `manager.rs` - Plugin discovery, loading, lifecycle
+  - [x] `bridge.rs` - Safe API bridge between plugins and editor
+  - [x] `commands.rs` - 11 Tauri commands for plugin management
+  
+- [x] **Security Model** (3-layer protection)
+  - [x] Fuel mechanism - prevent infinite loops (10M instructions limit)
+  - [x] Memory cap - prevent OOM (64MB hard limit)
+  - [x] VFS permission checks - unified file access control
+  
+- [x] **Sample Plugin** (`plugins/sample-plugin/`)
+  - [x] uppercase, word-count, sort-lines commands
+  - [x] plugin.json manifest with UI declarations
+  - [x] Cross-platform .wasm binary
+
+- [x] **Host API for Plugins**
+  - [x] `sak_log()` - Logging
+  - [x] `sak_get_content()` / `sak_set_content()` - File operations
+  - [x] `sak_show_notification()` - UI notifications
+  - [x] `sak_get_selection()` - Editor selection
+
+#### Notepad++ Core Features Complete
+- [x] **Session Management**: Save/restore editor sessions
+- [x] **Print Manager**: Cross-platform printing (Linux/Win/Mac)
+- [x] **Find in Files**: Cross-file search with regex
+- [x] **Go to Line**: Ctrl+G dialog
+- [x] **Recent Files**: Persistent list with timestamps
+
+#### LLM Integration
+- [x] **MCP Server**: 30+ tools for AI assistants
+- [x] **LLM Guide**: `docs/LLM_GUIDE.md` for easy integration
+- [x] **Semantic Analysis**: Code parsing, natural language queries
+
+#### Testing & Debugging
+- [x] **GUI Tests**: 46 Playwright E2E tests
+- [x] **Debug Logging**: Complete `debug-logging` branch
+  - [x] `scripts/run-with-logs.sh` - Automatic logging
+  - [x] `scripts/view-logs.sh` - Log viewer
+  - [x] Full Open File workflow tracing (29 logs in App.tsx, 17 in Editor.tsx, 40 in backend)
+- [x] **Dialog Fix**: Fixed `tauri.conf.json` plugins configuration
+
+#### Git Branches
+- [x] `main` - Production code (all features)
+- [x] `debug-logging` - Debug version with full tracing
+
+**Total**: 117 Rust tests + 46 Playwright tests passing, 0 build errors
+
+#### In Progress / Next
+- [ ] GUI testing in actual user environment
+- [ ] Verify Open File workflow with debug logs
+- [ ] Plugin marketplace (future)

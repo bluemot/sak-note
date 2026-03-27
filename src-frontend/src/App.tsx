@@ -64,6 +64,7 @@ function App() {
   const handleOpenFile = useCallback(async () => {
     const timestamp = new Date().toISOString();
     log(`[App::handleOpenFile] === OPEN FILE WORKFLOW STARTED ===`);
+    log(`[App::handleOpenFile] Environment check: window.__TAURI__ = ${(window as any).__TAURI__ ? 'defined' : 'undefined'}`);
     log(`[App::handleOpenFile] Entry point - pluginsInitialized=${pluginsInitialized}, timestamp=${timestamp}`);
     
     try {
@@ -74,7 +75,9 @@ function App() {
       const dialogStartTime = new Date().toISOString();
       log(`[App::handleOpenFile] Calling Tauri dialog.open() at ${dialogStartTime}`);
       log(`[App::handleOpenFile] Dialog params: multiple=false, filters=[All Files, Text Files, Code Files]`);
+      log(`[App::handleOpenFile] About to call open() function`);
       
+      log(`[App::handleOpenFile] Starting dialog.open() call`);
       const selected = await open({
         multiple: false,
         filters: [
@@ -83,6 +86,7 @@ function App() {
           { name: 'Code Files', extensions: ['c', 'cpp', 'h', 'hpp', 'java', 'go', 'rb', 'php'] },
         ]
       });
+      log(`[App::handleOpenFile] dialog.open() returned`);
       
       const dialogEndTime = new Date().toISOString();
       log(`[App::handleOpenFile] Dialog returned at ${dialogEndTime}`);

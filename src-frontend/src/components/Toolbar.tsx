@@ -37,6 +37,7 @@ function Toolbar({
           onClick={onOpenFile} 
           disabled={isLoading}
           className="toolbar-btn primary"
+          data-testid="open-file-btn"
         >
           {isLoading ? 'Loading...' : '📂 Open'}
         </button>
@@ -44,6 +45,7 @@ function Toolbar({
           <button 
             onClick={onCloseFile}
             className="toolbar-btn"
+            data-testid="close-file-btn"
           >
             ❌ Close
           </button>

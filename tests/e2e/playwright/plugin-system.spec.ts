@@ -1,5 +1,4 @@
 import { test, expect, Page } from '@playwright/test';
-import { invoke } from '@tauri-apps/api/core';
 
 /**
  * Plugin System E2E Tests
@@ -9,7 +8,17 @@ import { invoke } from '@tauri-apps/api/core';
  * - Plugin loading
  * - Plugin execution
  * - Error scenarios
+ * 
+ * Note: These tests require Tauri runtime to be available.
+ * In browser-only mode (Vite dev server), these tests will be skipped.
  */
+
+// Check if Tauri is available
+async function isTauriAvailable(page: Page): Promise<boolean> {
+  return await page.evaluate(() => {
+    return typeof (window as any).__TAURI__ !== 'undefined';
+  });
+}
 
 // Helper to invoke Tauri commands with logging
 async function invokeTauri<T>(page: Page, command: string, args?: any): Promise<T> {
@@ -33,6 +42,15 @@ async function invokeTauri<T>(page: Page, command: string, args?: any): Promise<
   console.log(`[Test] ${command} result:`, result.result);
   return result.result as T;
 }
+
+// Skip tests if Tauri is not available
+test.beforeEach(async ({ page }, testInfo) => {
+  const tauriAvailable = await isTauriAvailable(page);
+  if (!tauriAvailable) {
+    console.log(`[Test] Skipping "${testInfo.title}" - Tauri runtime not available`);
+    testInfo.skip();
+  }
+});
 
 // Helper to capture browser console logs
 test.beforeEach(async ({ page }) => {
