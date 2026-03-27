@@ -24,22 +24,28 @@ function App() {
   const [error, setError] = useState<string | null>(null)
   const [pluginsInitialized, setPluginsInitialized] = useState(false)
 
+  // Helper for formatted logging
+  const log = useCallback((msg: string, ...args: any[]) => {
+    console.log(`[${new Date().toISOString()}] ${msg}`, ...args)
+  }, [])
+
   // Initialize plugins on app startup
   useEffect(() => {
-    console.log('[App] Component mounted, initializing plugins...')
+    log('[App] Component mounted, initializing plugins...')
     
     const initPlugins = async () => {
       try {
-        console.log('[App] Starting plugin initialization...')
+        log('[App] initPlugins: Starting plugin initialization...')
         const result = await pluginService.initializeAndLoadPlugins()
-        console.log('[App] Plugins initialized:', result)
+        log('[App] initPlugins: Plugins initialized:', result)
         setPluginsInitialized(true)
         
         // Broadcast startup event
+        log('[App] initPlugins: Broadcasting Startup event...')
         await pluginService.broadcastEvent('Startup', { timestamp: Date.now() })
-        console.log('[App] Startup event broadcasted')
+        log('[App] initPlugins: Startup event broadcasted')
       } catch (err) {
-        console.error('[App] Failed to initialize plugins:', err)
+        console.error(`[${new Date().toISOString()}] [App] initPlugins: Failed to initialize plugins:`, err)
         // Don't set error - plugins are optional
       }
     }
@@ -48,20 +54,27 @@ function App() {
     
     // Cleanup on unmount
     return () => {
-      console.log('[App] Component unmounting...')
+      log('[App] Component unmounting...')
       // Broadcast shutdown event
       pluginService.broadcastEvent('Shutdown', { timestamp: Date.now() })
-        .catch(e => console.error('[App] Failed to broadcast shutdown:', e))
+        .catch(e => console.error(`[${new Date().toISOString()}] [App] Failed to broadcast shutdown:`, e))
     }
-  }, [])
+  }, [log])
 
   const handleOpenFile = useCallback(async () => {
-    console.log('[App] Opening file dialog...')
+    const timestamp = new Date().toISOString();
+    log(`[App::handleOpenFile] === OPEN FILE WORKFLOW STARTED ===`);
+    log(`[App::handleOpenFile] Entry point - pluginsInitialized=${pluginsInitialized}, timestamp=${timestamp}`);
+    
     try {
-      setIsLoading(true)
-      setError(null)
+      setIsLoading(true);
+      setError(null);
+      log(`[App::handleOpenFile] State updated: isLoading=true, error=null`);
       
-      console.log('[App] Calling Tauri dialog open...')
+      const dialogStartTime = new Date().toISOString();
+      log(`[App::handleOpenFile] Calling Tauri dialog.open() at ${dialogStartTime}`);
+      log(`[App::handleOpenFile] Dialog params: multiple=false, filters=[All Files, Text Files, Code Files]`);
+      
       const selected = await open({
         multiple: false,
         filters: [
@@ -69,51 +82,81 @@ function App() {
           { name: 'Text Files', extensions: ['txt', 'md', 'json', 'js', 'ts', 'py', 'rs', 'html', 'css'] },
           { name: 'Code Files', extensions: ['c', 'cpp', 'h', 'hpp', 'java', 'go', 'rb', 'php'] },
         ]
-      })
+      });
       
-      console.log('[App] Dialog result:', selected)
+      const dialogEndTime = new Date().toISOString();
+      log(`[App::handleOpenFile] Dialog returned at ${dialogEndTime}`);
+      log(`[App::handleOpenFile] Dialog result type:`, typeof selected);
+      log(`[App::handleOpenFile] Dialog result value:`, selected);
       
       if (selected && typeof selected === 'string') {
-        console.log('[App] Opening file:', selected)
-        const fileInfo = await invoke<FileInfo>('open_file', { path: selected })
-        console.log('[App] File opened:', fileInfo)
-        setCurrentFile(fileInfo)
+        log(`[App::handleOpenFile] VALID FILE SELECTED: path="${selected}"`);
+        
+        const invokeStartTime = new Date().toISOString();
+        log(`[App::handleOpenFile] Invoking 'open_file' command at ${invokeStartTime}`);
+        log(`[App::handleOpenFile] Invoke params: { path: "${selected}" }`);
+        
+        const fileInfo = await invoke<FileInfo>('open_file', { path: selected });
+        
+        const invokeEndTime = new Date().toISOString();
+        log(`[App::handleOpenFile] 'open_file' command completed at ${invokeEndTime}`);
+        log(`[App::handleOpenFile] Received fileInfo:`, {
+          path: fileInfo.path,
+          size: fileInfo.size,
+          chunks: fileInfo.chunks,
+          chunk_size: fileInfo.chunk_size
+        });
+        
+        setCurrentFile(fileInfo);
+        log(`[App::handleOpenFile] currentFile state updated with path="${fileInfo.path}"`);
         
         // Broadcast file opened event to plugins
         if (pluginsInitialized) {
-          console.log('[App] Broadcasting FileOpened event...')
-          await pluginService.broadcastEvent('FileOpened', { path: selected })
+          log(`[App::handleOpenFile] Broadcasting FileOpened event for: "${selected}"`);
+          await pluginService.broadcastEvent('FileOpened', { path: selected });
+          log(`[App::handleOpenFile] FileOpened event broadcasted successfully`);
+        } else {
+          log(`[App::handleOpenFile] Skipping plugin broadcast - plugins not initialized`);
         }
       } else {
-        console.log('[App] No file selected')
+        log(`[App::handleOpenFile] NO FILE SELECTED: Dialog cancelled or returned invalid value (result=${selected})`);
       }
     } catch (err) {
-      console.error('[App] Error opening file:', err)
-      setError(err instanceof Error ? err.message : String(err))
+      const errorTime = new Date().toISOString();
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      log(`[App::handleOpenFile] ERROR at ${errorTime}:`, errorMsg);
+      log(`[App::handleOpenFile] Error type:`, err?.constructor?.name || typeof err);
+      if (err instanceof Error && err.stack) {
+        log(`[App::handleOpenFile] Error stack:`, err.stack);
+      }
+      setError(errorMsg);
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
+      const endTime = new Date().toISOString();
+      log(`[App::handleOpenFile] === OPEN FILE WORKFLOW COMPLETED at ${endTime} ===`);
     }
-  }, [pluginsInitialized])
+  }, [pluginsInitialized, log])
 
   const handleCloseFile = useCallback(async () => {
     if (currentFile) {
-      console.log('[App] Closing file:', currentFile.path)
+      log('[App] handleCloseFile: Closing file: ' + currentFile.path)
       try {
         // Broadcast file closed event
         if (pluginsInitialized) {
-          console.log('[App] Broadcasting FileClosed event...')
+          log('[App] handleCloseFile: Broadcasting FileClosed event for: ' + currentFile.path)
           await pluginService.broadcastEvent('FileClosed', { path: currentFile.path })
         }
         
+        log('[App] handleCloseFile: Calling invoke("close_file", { path: "' + currentFile.path + '" })')
         await invoke('close_file', { path: currentFile.path })
-        console.log('[App] File closed successfully')
+        log('[App] handleCloseFile: File closed successfully')
         setCurrentFile(null)
       } catch (err) {
-        console.error('[App] Error closing file:', err)
+        console.error(`[${new Date().toISOString()}] [App] handleCloseFile: Error closing file:`, err)
         setError(err instanceof Error ? err.message : String(err))
       }
     }
-  }, [currentFile, pluginsInitialized])
+  }, [currentFile, pluginsInitialized, log])
 
   const handleToggleView = useCallback(() => {
     console.log('[App] Toggling view mode:', viewMode, '->', viewMode === 'text' ? 'hex' : 'text')
@@ -122,14 +165,14 @@ function App() {
 
   // Log state changes
   useEffect(() => {
-    console.log('[App] State update:', {
+    log('[App] State update:', {
       hasFile: !!currentFile,
       viewMode,
       isLoading,
       hasError: !!error,
       pluginsInitialized
     })
-  }, [currentFile, viewMode, isLoading, error, pluginsInitialized])
+  }, [currentFile, viewMode, isLoading, error, pluginsInitialized, log])
 
   return (
     <div className="app">

@@ -1,5 +1,8 @@
 use serde::{Serialize, Deserialize};
 
+// Re-export chrono for timestamp logging
+pub use chrono;
+
 mod file_engine;
 mod mark_engine;
 mod sak_format;
@@ -180,22 +183,95 @@ struct MarkCountResponse {
 
 // ============== Tauri Commands ==============
 
+/// Open file command - entry point for file open workflow from frontend
 #[tauri::command]
 async fn open_file(path: String) -> Result<OpenFileResponse, String> {
+    let start_time = std::time::Instant::now();
+    let timestamp = chrono::Local::now().format("%Y-%m-%d %H:%M:%S%.3f");
+    
+    log::info!("[lib::open_file] === OPEN FILE COMMAND STARTED ===");
+    log::info!("[lib::open_file] Received path: {}", path);
+    log::debug!("[lib::open_file] Timestamp: {}", timestamp);
+    
     // Open as editable by default
+    log::debug!("[lib::open_file] Calling FileEngine::open_for_edit()");
     match FileEngine::open_for_edit(&path) {
         Ok(manager) => {
-            let guard = manager.read().map_err(|e| format!("Lock error: {}", e))?;
+            log::debug!("[lib::open_file] FileEngine::open_for_edit() returned Ok, acquiring read lock");
+            let guard = manager.read().map_err(|e| {
+                log::error!("[lib::open_file] Failed to acquire read lock: {}", e);
+                format!("Lock error: {}", e)
+            })?;
+            
+            let effective_size = guard.effective_size();
+            let chunks = ((effective_size + CHUNK_SIZE as u64 - 1) / CHUNK_SIZE as u64) as usize;
+            let has_changes = guard.has_changes();
+            
+            log::info!("[lib::open_file] File opened successfully:");
+            log::info!("[lib::open_file]   Path: {}", path);
+            log::info!("[lib::open_file]   Size: {} bytes", effective_size);
+            log::info!("[lib::open_file]   Chunks: {}", chunks);
+            log::info!("[lib::open_file]   Chunk size: {} bytes", CHUNK_SIZE);
+            log::info!("[lib::open_file]   Has changes: {}", has_changes);
+            
+            let elapsed = start_time.elapsed();
+            log::info!("[lib::open_file] === OPEN FILE COMMAND COMPLETED in {:?} ===", elapsed);
+            
             Ok(OpenFileResponse {
                 path: path.clone(),
-                size: guard.effective_size(),
-                chunks: ((guard.effective_size() + CHUNK_SIZE as u64 - 1) / CHUNK_SIZE as u64) as usize,
+                size: effective_size,
+                chunks,
                 chunk_size: CHUNK_SIZE,
                 editable: true,
-                has_changes: guard.has_changes(),
+                has_changes,
             })
         }
-        Err(e) => Err(format!("Failed to open file: {}", e)),
+        Err(e) => {
+            let elapsed = start_time.elapsed();
+            log::error!("[lib::open_file] Failed to open file after {:?}: {}", elapsed, e);
+            log::error!("[lib::open_file] Path: {}", path);
+            Err(format!("Failed to open file: {}", e))
+        }
+    }
+}
+
+/// Get text command - retrieves text content from file
+#[tauri::command]
+async fn get_text(req: GetTextRequest) -> Result<String, String> {
+    let start_time = std::time::Instant::now();
+    let timestamp = chrono::Local::now().format("%Y-%m-%d %H:%M:%S%.3f");
+    
+    log::info!("[lib::get_text] === GET TEXT COMMAND STARTED ===");
+    log::info!("[lib::get_text] Request: path={}, start={}, end={}", req.path, req.start, req.end);
+    log::debug!("[lib::get_text] Timestamp: {}", timestamp);
+    
+    log::debug!("[lib::get_text] Looking up editable file manager for path: {}", req.path);
+    match FileEngine::get_editable(&req.path) {
+        Some(manager) => {
+            log::debug!("[lib::get_text] File manager found, acquiring read lock");
+            let guard = manager.read().map_err(|e| {
+                log::error!("[lib::get_text] Failed to acquire read lock: {}", e);
+                format!("Lock error: {}", e)
+            })?;
+            
+            let length = req.end.saturating_sub(req.start);
+            log::debug!("[lib::get_text] Calling get_text() with offset={}, length={}", req.start, length);
+            
+            let text = guard.get_text(req.start, length);
+            let text_len = text.len();
+            
+            let elapsed = start_time.elapsed();
+            log::info!("[lib::get_text] Text retrieved successfully: {} bytes in {:?}", text_len, elapsed);
+            log::debug!("[lib::get_text] Preview (first 100 chars): {}", 
+                if text_len > 100 { &text[..100] } else { &text });
+            log::info!("[lib::get_text] === GET TEXT COMMAND COMPLETED ===");
+            
+            Ok(text)
+        }
+        None => {
+            log::error!("[lib::get_text] File not open in editable mode: {}", req.path);
+            Err("File not open".to_string())
+        }
     }
 }
 
