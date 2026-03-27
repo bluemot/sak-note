@@ -54,13 +54,30 @@ pub struct PluginExecutionResult {
 
 /// Initialize the plugin system
 pub fn init() -> Result<PluginManager, String> {
-    let mut manager = PluginManager::new()?;
+    log::info!("[plugin:init] Initializing plugin system...");
+    
+    let mut manager = PluginManager::new()
+        .map_err(|e| {
+            log::error!("[plugin:init] Failed to create PluginManager: {}", e);
+            e
+        })?;
+    
+    log::info!("[plugin:init] PluginManager created, discovering plugins...");
     
     // Discover and load plugins
-    manager.discover_plugins()
-        .map_err(|e| format!("Failed to discover plugins: {}", e))?;
+    match manager.discover_plugins() {
+        Ok(discovered) => {
+            log::info!("[plugin:init] Discovered {} plugins", discovered.len());
+            for plugin in &discovered {
+                log::info!("[plugin:init]   - {} v{} at {:?}", plugin.manifest.id, plugin.manifest.version, plugin.wasm_path);
+            }
+        }
+        Err(e) => {
+            log::error!("[plugin:init] Failed to discover plugins: {}", e);
+        }
+    }
     
-    log::info!("Plugin system initialized with {} plugins", manager.loaded_plugins.len());
+    log::info!("[plugin:init] Plugin system initialized with {} plugins loaded", manager.loaded_plugins.len());
     
     Ok(manager)
 }

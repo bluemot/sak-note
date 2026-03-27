@@ -9,7 +9,7 @@ use lazy_static::lazy_static;
 
 use crate::plugin_runtime::{
     manager::PluginManager,
-    plugin_api::{PluginManifest, PluginMetadata, EditorEvent, PluginLoadStatus, PluginExecutionResult},
+    plugin_api::{PluginManifest, PluginMetadata, PluginCapability, EditorEvent, PluginLoadStatus, PluginExecutionResult},
 };
 
 /// Plugin command error
@@ -36,39 +36,87 @@ lazy_static! {
 /// Initialize the plugin system
 #[tauri::command]
 pub fn plugin_init() -> Result<bool, PluginCommandError> {
-    let manager = PluginManager::new()
-        .map_err(|e| PluginCommandError::from(e))?;
+    log::info!("[plugin:commands] plugin_init called");
     
-    let mut global = PLUGIN_MANAGER.lock().map_err(|e| PluginCommandError::from(e.to_string()))?;
+    let manager = PluginManager::new()
+        .map_err(|e| {
+            log::error!("[plugin:commands] Failed to create PluginManager: {}", e);
+            PluginCommandError::from(e)
+        })?;
+    
+    let mut global = PLUGIN_MANAGER.lock().map_err(|e| {
+        log::error!("[plugin:commands] Failed to lock PLUGIN_MANAGER: {}", e);
+        PluginCommandError::from(e.to_string())
+    })?;
     *global = Some(manager);
     
+    log::info!("[plugin:commands] plugin_init completed successfully");
     Ok(true)
 }
 
 /// Discover plugins in the plugin directory
 #[tauri::command]
 pub fn plugin_discover() -> Result<Vec<PluginManifest>, PluginCommandError> {
-    let mut manager_guard = PLUGIN_MANAGER.lock().map_err(|e| PluginCommandError::from(e.to_string()))?;
+    log::info!("[plugin:commands] plugin_discover called");
+    
+    let mut manager_guard = PLUGIN_MANAGER.lock().map_err(|e| {
+        log::error!("[plugin:commands] Failed to lock PLUGIN_MANAGER: {}", e);
+        PluginCommandError::from(e.to_string())
+    })?;
     
     let manager = manager_guard.as_mut()
-        .ok_or_else(|| PluginCommandError::from("Plugin system not initialized".to_string()))?;
+        .ok_or_else(|| {
+            log::error!("[plugin:commands] Plugin system not initialized");
+            PluginCommandError::from("Plugin system not initialized".to_string())
+        })?;
     
     let discovered = manager.discover_plugins()
-        .map_err(|e| PluginCommandError::from(e.to_string()))?;
+        .map_err(|e| {
+            log::error!("[plugin:commands] Failed to discover plugins: {}", e);
+            PluginCommandError::from(e.to_string())
+        })?;
     
-    Ok(discovered.into_iter().map(|p| p.manifest).collect())
+    let manifests: Vec<PluginManifest> = discovered.into_iter().map(|p| p.manifest).collect();
+    log::info!("[plugin:commands] plugin_discover found {} plugins", manifests.len());
+    
+    for manifest in &manifests {
+        log::debug!("[plugin:commands]   - Discovered plugin: {} ({}) v{}", manifest.name, manifest.id, manifest.version);
+    }
+    
+    Ok(manifests)
 }
 
 /// Load all discovered plugins
 #[tauri::command]
 pub fn plugin_load_all() -> Result<Vec<PluginLoadStatus>, PluginCommandError> {
-    let mut manager_guard = PLUGIN_MANAGER.lock().map_err(|e| PluginCommandError::from(e.to_string()))?;
+    log::info!("[plugin:commands] plugin_load_all called");
+    
+    let mut manager_guard = PLUGIN_MANAGER.lock().map_err(|e| {
+        log::error!("[plugin:commands] Failed to lock PLUGIN_MANAGER: {}", e);
+        PluginCommandError::from(e.to_string())
+    })?;
     
     let manager = manager_guard.as_mut()
-        .ok_or_else(|| PluginCommandError::from("Plugin system not initialized".to_string()))?;
+        .ok_or_else(|| {
+            log::error!("[plugin:commands] Plugin system not initialized");
+            PluginCommandError::from("Plugin system not initialized".to_string())
+        })?;
     
     let results = manager.load_all()
-        .map_err(|e| PluginCommandError::from(e.to_string()))?;
+        .map_err(|e| {
+            log::error!("[plugin:commands] Failed to load all plugins: {}", e);
+            PluginCommandError::from(e.to_string())
+        })?;
+    
+    log::info!("[plugin:commands] plugin_load_all completed: {} plugins processed", results.len());
+    
+    for result in &results {
+        if result.success {
+            log::info!("[plugin:commands]   - Successfully loaded: {} - {}", result.plugin_id, result.message);
+        } else {
+            log::warn!("[plugin:commands]   - Failed to load: {} - {}", result.plugin_id, result.message);
+        }
+    }
     
     Ok(results)
 }
@@ -76,20 +124,42 @@ pub fn plugin_load_all() -> Result<Vec<PluginLoadStatus>, PluginCommandError> {
 /// Load a specific plugin
 #[tauri::command]
 pub fn plugin_load(plugin_id: String) -> Result<PluginLoadStatus, PluginCommandError> {
-    let mut manager_guard = PLUGIN_MANAGER.lock().map_err(|e| PluginCommandError::from(e.to_string()))?;
+    log::info!("[plugin:commands] plugin_load called with plugin_id: {}", plugin_id);
+    
+    let mut manager_guard = PLUGIN_MANAGER.lock().map_err(|e| {
+        log::error!("[plugin:commands] Failed to lock PLUGIN_MANAGER: {}", e);
+        PluginCommandError::from(e.to_string())
+    })?;
     
     let manager = manager_guard.as_mut()
-        .ok_or_else(|| PluginCommandError::from("Plugin system not initialized".to_string()))?;
+        .ok_or_else(|| {
+            log::error!("[plugin:commands] Plugin system not initialized");
+            PluginCommandError::from("Plugin system not initialized".to_string())
+        })?;
     
     // First discover to find the plugin
     let discovered = manager.discover_plugins()
-        .map_err(|e| PluginCommandError::from(e.to_string()))?;
+        .map_err(|e| {
+            log::error!("[plugin:commands] Failed to discover plugins: {}", e);
+            PluginCommandError::from(e.to_string())
+        })?;
     
     let plugin = discovered.into_iter()
         .find(|p| p.manifest.id == plugin_id)
-        .ok_or_else(|| PluginCommandError::from(format!("Plugin '{}' not found", plugin_id)))?;
+        .ok_or_else(|| {
+            log::error!("[plugin:commands] Plugin '{}' not found during discovery", plugin_id);
+            PluginCommandError::from(format!("Plugin '{}' not found", plugin_id))
+        })?;
+    
+    log::debug!("[plugin:commands] Found plugin '{}' at {:?}", plugin_id, plugin.manifest_path);
     
     let status = manager.load_plugin(plugin);
+    
+    if status.success {
+        log::info!("[plugin:commands] plugin_load completed successfully for {}: {}", plugin_id, status.message);
+    } else {
+        log::error!("[plugin:commands] plugin_load failed for {}: {}", plugin_id, status.message);
+    }
     
     Ok(status)
 }
@@ -97,42 +167,84 @@ pub fn plugin_load(plugin_id: String) -> Result<PluginLoadStatus, PluginCommandE
 /// Unload a plugin
 #[tauri::command]
 pub fn plugin_unload(plugin_id: String) -> Result<(), PluginCommandError> {
-    let mut manager_guard = PLUGIN_MANAGER.lock().map_err(|e| PluginCommandError::from(e.to_string()))?;
+    log::info!("[plugin:commands] plugin_unload called with plugin_id: {}", plugin_id);
+    
+    let mut manager_guard = PLUGIN_MANAGER.lock().map_err(|e| {
+        log::error!("[plugin:commands] Failed to lock PLUGIN_MANAGER: {}", e);
+        PluginCommandError::from(e.to_string())
+    })?;
     
     let manager = manager_guard.as_mut()
-        .ok_or_else(|| PluginCommandError::from("Plugin system not initialized".to_string()))?;
+        .ok_or_else(|| {
+            log::error!("[plugin:commands] Plugin system not initialized");
+            PluginCommandError::from("Plugin system not initialized".to_string())
+        })?;
     
     manager.unload_plugin(&plugin_id)
-        .map_err(|e| PluginCommandError::from(e.to_string()))?;
+        .map_err(|e| {
+            log::error!("[plugin:commands] Failed to unload plugin {}: {}", plugin_id, e);
+            PluginCommandError::from(e.to_string())
+        })?;
     
+    log::info!("[plugin:commands] plugin_unload completed successfully for {}", plugin_id);
     Ok(())
 }
 
 /// Get all loaded plugins
 #[tauri::command]
 pub fn plugin_list_loaded() -> Result<Vec<PluginMetadata>, PluginCommandError> {
-    let manager_guard = PLUGIN_MANAGER.lock().map_err(|e| PluginCommandError::from(e.to_string()))?;
+    log::info!("[plugin:commands] plugin_list_loaded called");
+    
+    let manager_guard = PLUGIN_MANAGER.lock().map_err(|e| {
+        log::error!("[plugin:commands] Failed to lock PLUGIN_MANAGER: {}", e);
+        PluginCommandError::from(e.to_string())
+    })?;
     
     let manager = manager_guard.as_ref()
-        .ok_or_else(|| PluginCommandError::from("Plugin system not initialized".to_string()))?;
+        .ok_or_else(|| {
+            log::error!("[plugin:commands] Plugin system not initialized");
+            PluginCommandError::from("Plugin system not initialized".to_string())
+        })?;
     
-    Ok(manager.get_loaded_plugins()
+    let plugins: Vec<PluginMetadata> = manager.get_loaded_plugins()
         .into_iter()
         .cloned()
-        .collect())
+        .collect();
+    
+    log::info!("[plugin:commands] plugin_list_loaded returning {} loaded plugins", plugins.len());
+    
+    for plugin in &plugins {
+        log::debug!("[plugin:commands]   - Loaded plugin: {} ({}) enabled={}", plugin.name, plugin.id, plugin.enabled);
+    }
+    
+    Ok(plugins)
 }
 
 /// Get plugin info
 #[tauri::command]
 pub fn plugin_get_info(plugin_id: String) -> Result<PluginMetadata, PluginCommandError> {
-    let manager_guard = PLUGIN_MANAGER.lock().map_err(|e| PluginCommandError::from(e.to_string()))?;
+    log::info!("[plugin:commands] plugin_get_info called with plugin_id: {}", plugin_id);
+    
+    let manager_guard = PLUGIN_MANAGER.lock().map_err(|e| {
+        log::error!("[plugin:commands] Failed to lock PLUGIN_MANAGER: {}", e);
+        PluginCommandError::from(e.to_string())
+    })?;
     
     let manager = manager_guard.as_ref()
-        .ok_or_else(|| PluginCommandError::from("Plugin system not initialized".to_string()))?;
+        .ok_or_else(|| {
+            log::error!("[plugin:commands] Plugin system not initialized");
+            PluginCommandError::from("Plugin system not initialized".to_string())
+        })?;
     
-    manager.get_plugin(&plugin_id)
+    let metadata = manager.get_plugin(&plugin_id)
         .cloned()
-        .ok_or_else(|| PluginCommandError::from(format!("Plugin '{}' not found", plugin_id)))
+        .ok_or_else(|| {
+            log::error!("[plugin:commands] Plugin '{}' not found", plugin_id);
+            PluginCommandError::from(format!("Plugin '{}' not found", plugin_id))
+        })?;
+    
+    log::debug!("[plugin:commands] plugin_get_info returning: {} v{}", metadata.name, metadata.version);
+    Ok(metadata)
 }
 
 /// Execute a plugin capability
@@ -142,24 +254,42 @@ pub fn plugin_execute(
     capability_id: String,
     input: Option<String>,
 ) -> Result<PluginExecutionResult, PluginCommandError> {
-    let mut manager_guard = PLUGIN_MANAGER.lock().map_err(|e| PluginCommandError::from(e.to_string()))?;
+    let input_str = input.as_deref().unwrap_or_default();
+    log::info!("[plugin:commands] plugin_execute called: plugin_id={}, capability_id={}, input_len={}",
+        plugin_id, capability_id, input_str.len());
+    log::debug!("[plugin:commands] plugin_execute input: {}", input_str);
+    
+    let mut manager_guard = PLUGIN_MANAGER.lock().map_err(|e| {
+        log::error!("[plugin:commands] Failed to lock PLUGIN_MANAGER: {}", e);
+        PluginCommandError::from(e.to_string())
+    })?;
     
     let manager = manager_guard.as_mut()
-        .ok_or_else(|| PluginCommandError::from("Plugin system not initialized".to_string()))?;
+        .ok_or_else(|| {
+            log::error!("[plugin:commands] Plugin system not initialized");
+            PluginCommandError::from("Plugin system not initialized".to_string())
+        })?;
     
     let input = input.unwrap_or_default();
     
     match manager.execute_capability(&plugin_id, &capability_id, &input) {
-        Ok(output) => Ok(PluginExecutionResult {
-            success: true,
-            output: Some(output),
-            error: None,
-        }),
-        Err(e) => Ok(PluginExecutionResult {
-            success: false,
-            output: None,
-            error: Some(e.to_string()),
-        }),
+        Ok(output) => {
+            log::info!("[plugin:commands] plugin_execute completed successfully for {}.{}", plugin_id, capability_id);
+            log::debug!("[plugin:commands] plugin_execute output: {}", output);
+            Ok(PluginExecutionResult {
+                success: true,
+                output: Some(output),
+                error: None,
+            })
+        }
+        Err(e) => {
+            log::error!("[plugin:commands] plugin_execute failed for {}.{}: {}", plugin_id, capability_id, e);
+            Ok(PluginExecutionResult {
+                success: false,
+                output: None,
+                error: Some(e.to_string()),
+            })
+        }
     }
 }
 
@@ -169,24 +299,44 @@ pub fn plugin_set_enabled(
     plugin_id: String,
     enabled: bool,
 ) -> Result<(), PluginCommandError> {
-    let mut manager_guard = PLUGIN_MANAGER.lock().map_err(|e| PluginCommandError::from(e.to_string()))?;
+    log::info!("[plugin:commands] plugin_set_enabled called: plugin_id={}, enabled={}", plugin_id, enabled);
+    
+    let mut manager_guard = PLUGIN_MANAGER.lock().map_err(|e| {
+        log::error!("[plugin:commands] Failed to lock PLUGIN_MANAGER: {}", e);
+        PluginCommandError::from(e.to_string())
+    })?;
     
     let manager = manager_guard.as_mut()
-        .ok_or_else(|| PluginCommandError::from("Plugin system not initialized".to_string()))?;
+        .ok_or_else(|| {
+            log::error!("[plugin:commands] Plugin system not initialized");
+            PluginCommandError::from("Plugin system not initialized".to_string())
+        })?;
     
     manager.set_plugin_enabled(&plugin_id, enabled)
-        .map_err(|e| PluginCommandError::from(e.to_string()))?;
+        .map_err(|e| {
+            log::error!("[plugin:commands] Failed to set plugin enabled status for {}: {}", plugin_id, e);
+            PluginCommandError::from(e.to_string())
+        })?;
     
+    log::info!("[plugin:commands] plugin_set_enabled completed successfully for {}", plugin_id);
     Ok(())
 }
 
 /// Get all capabilities from all loaded plugins
 #[tauri::command]
 pub fn plugin_get_capabilities() -> Result<Vec<PluginCapabilityInfo>, PluginCommandError> {
-    let manager_guard = PLUGIN_MANAGER.lock().map_err(|e| PluginCommandError::from(e.to_string()))?;
+    log::info!("[plugin:commands] plugin_get_capabilities called");
+    
+    let manager_guard = PLUGIN_MANAGER.lock().map_err(|e| {
+        log::error!("[plugin:commands] Failed to lock PLUGIN_MANAGER: {}", e);
+        PluginCommandError::from(e.to_string())
+    })?;
     
     let manager = manager_guard.as_ref()
-        .ok_or_else(|| PluginCommandError::from("Plugin system not initialized".to_string()))?;
+        .ok_or_else(|| {
+            log::error!("[plugin:commands] Plugin system not initialized");
+            PluginCommandError::from("Plugin system not initialized".to_string())
+        })?;
     
     let capabilities = manager.get_all_capabilities()
         .into_iter()
@@ -196,35 +346,59 @@ pub fn plugin_get_capabilities() -> Result<Vec<PluginCapabilityInfo>, PluginComm
         })
         .collect();
     
+    log::info!("[plugin:commands] plugin_get_capabilities returning capabilities");
     Ok(capabilities)
 }
 
 /// Broadcast an editor event to all plugins
 #[tauri::command]
 pub fn plugin_broadcast_event(event_type: String, event_data: Value) -> Result<(), PluginCommandError> {
-    let mut manager_guard = PLUGIN_MANAGER.lock().map_err(|e| PluginCommandError::from(e.to_string()))?;
+    log::info!("[plugin:commands] plugin_broadcast_event called: event_type={}", event_type);
+    log::debug!("[plugin:commands] plugin_broadcast_event data: {}", event_data);
+    
+    let mut manager_guard = PLUGIN_MANAGER.lock().map_err(|e| {
+        log::error!("[plugin:commands] Failed to lock PLUGIN_MANAGER: {}", e);
+        PluginCommandError::from(e.to_string())
+    })?;
     
     let manager = manager_guard.as_mut()
-        .ok_or_else(|| PluginCommandError::from("Plugin system not initialized".to_string()))?;
+        .ok_or_else(|| {
+            log::error!("[plugin:commands] Plugin system not initialized");
+            PluginCommandError::from("Plugin system not initialized".to_string())
+        })?;
     
     // Parse event from JSON
     let event = parse_event(&event_type, event_data)
-        .map_err(|e| PluginCommandError::from(format!("Failed to parse event: {}", e)))?;
+        .map_err(|e| {
+            log::error!("[plugin:commands] Failed to parse event '{}': {}", event_type, e);
+            PluginCommandError::from(format!("Failed to parse event: {}", e))
+        })?;
     
     manager.broadcast_event(&event);
     
+    log::info!("[plugin:commands] plugin_broadcast_event completed for {}", event_type);
     Ok(())
 }
 
 /// Get plugin directory path
 #[tauri::command]
 pub fn plugin_get_directory() -> Result<String, PluginCommandError> {
-    let manager_guard = PLUGIN_MANAGER.lock().map_err(|e| PluginCommandError::from(e.to_string()))?;
+    log::info!("[plugin:commands] plugin_get_directory called");
+    
+    let manager_guard = PLUGIN_MANAGER.lock().map_err(|e| {
+        log::error!("[plugin:commands] Failed to lock PLUGIN_MANAGER: {}", e);
+        PluginCommandError::from(e.to_string())
+    })?;
     
     let manager = manager_guard.as_ref()
-        .ok_or_else(|| PluginCommandError::from("Plugin system not initialized".to_string()))?;
+        .ok_or_else(|| {
+            log::error!("[plugin:commands] Plugin system not initialized");
+            PluginCommandError::from("Plugin system not initialized".to_string())
+        })?;
     
-    Ok(manager.plugin_dir.to_string_lossy().to_string())
+    let path = manager.plugin_dir.to_string_lossy().to_string();
+    log::info!("[plugin:commands] plugin_get_directory returning: {}", path);
+    Ok(path)
 }
 
 
@@ -239,6 +413,8 @@ pub struct PluginCapabilityInfo {
 
 /// Parse event from JSON
 fn parse_event(event_type: &str, data: Value) -> Result<EditorEvent, String> {
+    log::debug!("[plugin:commands] parse_event called: event_type={}", event_type);
+    
     let event = match event_type {
         "FileOpened" => {
             let path = data.get("path")
@@ -288,5 +464,6 @@ fn parse_event(event_type: &str, data: Value) -> Result<EditorEvent, String> {
         },
     };
     
+    log::debug!("[plugin:commands] parse_event completed: {:?}", event);
     Ok(event)
 }

@@ -568,6 +568,16 @@ async fn execute_module(
 }
 
 pub fn run() {
+    log::info!("[lib] SAK Editor run() starting...");
+    
+    // Initialize plugin system
+    log::info!("[lib] Initializing plugin system...");
+    if let Err(e) = plugin_runtime::manager::init_plugin_manager() {
+        log::error!("[lib] Failed to initialize plugin manager: {}", e);
+    } else {
+        log::info!("[lib] Plugin manager initialized successfully");
+    }
+    
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
             // File operations
