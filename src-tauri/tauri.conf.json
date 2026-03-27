@@ -24,6 +24,12 @@
       "csp": null
     }
   },
+  "plugins": {
+    "dialog": {
+      "open": true,
+      "save": true
+    }
+  },
   "bundle": {
     "active": true,
     "category": "DeveloperTool",
