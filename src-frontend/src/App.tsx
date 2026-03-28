@@ -10,6 +10,24 @@ import './App.css'
 // Import plugin service for initialization and logging
 import * as pluginService from './services/pluginService'
 
+// Import all Phase 2 modules
+import {
+  registerFileModule,
+  registerFileActions,
+  registerEditModule,
+  registerEditActions,
+  registerSftpModule,
+  registerSftpActions,
+  registerMarksModule,
+  registerMarksActions,
+  registerBookmarkModule,
+  registerBookmarkActions,
+  registerLlmModule,
+  registerLlmActions,
+  registerPrintModule,
+  registerPrintActions
+} from './modules'
+
 interface FileInfo {
   path: string
   size: number
@@ -29,12 +47,35 @@ function App() {
     console.log(`[${new Date().toISOString()}] ${msg}`, ...args)
   }, [])
 
-  // Initialize plugins on app startup
+  // Initialize all modules and plugins on app startup
   useEffect(() => {
-    log('[App] Component mounted, initializing plugins...')
+    log('[App] Component mounted, initializing modules...')
     
-    const initPlugins = async () => {
+    const initAll = async () => {
       try {
+        // Register UI modules
+        log('[App] Registering UI modules...')
+        registerFileModule()
+        registerEditModule()
+        registerSftpModule()
+        registerMarksModule()
+        registerBookmarkModule()
+        registerLlmModule()
+        registerPrintModule()
+        log('[App] All UI modules registered')
+        
+        // Register action handlers
+        log('[App] Registering action handlers...')
+        registerFileActions()
+        registerEditActions()
+        registerSftpActions()
+        registerMarksActions()
+        registerBookmarkActions()
+        registerLlmActions()
+        registerPrintActions()
+        log('[App] All action handlers registered')
+        
+        // Initialize plugins
         log('[App] initPlugins: Starting plugin initialization...')
         const result = await pluginService.initializeAndLoadPlugins()
         log('[App] initPlugins: Plugins initialized:', result)
@@ -45,12 +86,12 @@ function App() {
         await pluginService.broadcastEvent('Startup', { timestamp: Date.now() })
         log('[App] initPlugins: Startup event broadcasted')
       } catch (err) {
-        console.error(`[${new Date().toISOString()}] [App] initPlugins: Failed to initialize plugins:`, err)
+        console.error(`[${new Date().toISOString()}] [App] initPlugins: Failed to initialize:`, err)
         // Don't set error - plugins are optional
       }
     }
     
-    initPlugins()
+    initAll()
     
     // Cleanup on unmount
     return () => {
@@ -62,22 +103,12 @@ function App() {
   }, [log])
 
   const handleOpenFile = useCallback(async () => {
-    const timestamp = new Date().toISOString();
     log(`[App::handleOpenFile] === OPEN FILE WORKFLOW STARTED ===`);
-    log(`[App::handleOpenFile] Environment check: window.__TAURI__ = ${(window as any).__TAURI__ ? 'defined' : 'undefined'}`);
-    log(`[App::handleOpenFile] Entry point - pluginsInitialized=${pluginsInitialized}, timestamp=${timestamp}`);
     
     try {
       setIsLoading(true);
       setError(null);
-      log(`[App::handleOpenFile] State updated: isLoading=true, error=null`);
       
-      const dialogStartTime = new Date().toISOString();
-      log(`[App::handleOpenFile] Calling Tauri dialog.open() at ${dialogStartTime}`);
-      log(`[App::handleOpenFile] Dialog params: multiple=false, filters=[All Files, Text Files, Code Files]`);
-      log(`[App::handleOpenFile] About to call open() function`);
-      
-      log(`[App::handleOpenFile] Starting dialog.open() call`);
       const selected = await open({
         multiple: false,
         filters: [
@@ -86,81 +117,46 @@ function App() {
           { name: 'Code Files', extensions: ['c', 'cpp', 'h', 'hpp', 'java', 'go', 'rb', 'php'] },
         ]
       });
-      log(`[App::handleOpenFile] dialog.open() returned`);
-      
-      const dialogEndTime = new Date().toISOString();
-      log(`[App::handleOpenFile] Dialog returned at ${dialogEndTime}`);
-      log(`[App::handleOpenFile] Dialog result type:`, typeof selected);
-      log(`[App::handleOpenFile] Dialog result value:`, selected);
       
       if (selected && typeof selected === 'string') {
-        log(`[App::handleOpenFile] VALID FILE SELECTED: path="${selected}"`);
-        
-        const invokeStartTime = new Date().toISOString();
-        log(`[App::handleOpenFile] Invoking 'open_file' command at ${invokeStartTime}`);
-        log(`[App::handleOpenFile] Invoke params: { path: "${selected}" }`);
+        log(`[App::handleOpenFile] Opening file: ${selected}`);
         
         const fileInfo = await invoke<FileInfo>('open_file', { path: selected });
         
-        const invokeEndTime = new Date().toISOString();
-        log(`[App::handleOpenFile] 'open_file' command completed at ${invokeEndTime}`);
-        log(`[App::handleOpenFile] Received fileInfo:`, {
-          path: fileInfo.path,
-          size: fileInfo.size,
-          chunks: fileInfo.chunks,
-          chunk_size: fileInfo.chunk_size
-        });
-        
         setCurrentFile(fileInfo);
-        log(`[App::handleOpenFile] currentFile state updated with path="${fileInfo.path}"`);
         
         // Broadcast file opened event to plugins
         if (pluginsInitialized) {
-          log(`[App::handleOpenFile] Broadcasting FileOpened event for: "${selected}"`);
           await pluginService.broadcastEvent('FileOpened', { path: selected });
-          log(`[App::handleOpenFile] FileOpened event broadcasted successfully`);
-        } else {
-          log(`[App::handleOpenFile] Skipping plugin broadcast - plugins not initialized`);
         }
-      } else {
-        log(`[App::handleOpenFile] NO FILE SELECTED: Dialog cancelled or returned invalid value (result=${selected})`);
       }
     } catch (err) {
-      const errorTime = new Date().toISOString();
       const errorMsg = err instanceof Error ? err.message : String(err);
-      log(`[App::handleOpenFile] ERROR at ${errorTime}:`, errorMsg);
-      log(`[App::handleOpenFile] Error type:`, err?.constructor?.name || typeof err);
-      if (err instanceof Error && err.stack) {
-        log(`[App::handleOpenFile] Error stack:`, err.stack);
-      }
+      log(`[App::handleOpenFile] ERROR:`, errorMsg);
       setError(errorMsg);
     } finally {
       setIsLoading(false);
-      const endTime = new Date().toISOString();
-      log(`[App::handleOpenFile] === OPEN FILE WORKFLOW COMPLETED at ${endTime} ===`);
     }
-  }, [pluginsInitialized, log])
+  }, [pluginsInitialized, log]);
 
   const handleCloseFile = useCallback(async () => {
     if (currentFile) {
-      log('[App] handleCloseFile: Closing file: ' + currentFile.path)
+      log('[App] handleCloseFile: Closing file:', currentFile.path);
       try {
         // Broadcast file closed event
         if (pluginsInitialized) {
-          log('[App] handleCloseFile: Broadcasting FileClosed event for: ' + currentFile.path)
-          await pluginService.broadcastEvent('FileClosed', { path: currentFile.path })
+          await pluginService.broadcastEvent('FileClosed', { path: currentFile.path });
         }
         
-        log('[App] handleCloseFile: Calling invoke("close_file", { path: "' + currentFile.path + '" })')
-        await invoke('close_file', { path: currentFile.path })
-        log('[App] handleCloseFile: File closed successfully')
-        setCurrentFile(null)
+        await invoke('close_file', { path: currentFile.path });
+        setCurrentFile(null);
+        setError(null);
       } catch (err) {
-        console.error(`[${new Date().toISOString()}] [App] handleCloseFile: Error closing file:`, err)
-        setError(err instanceof Error ? err.message : String(err))
+        console.error(`[${new Date().toISOString()}] [App] handleCloseFile: Error closing file:`, err);
+        setError(err instanceof Error ? err.message : String(err));
       }
     }
-  }, [currentFile, pluginsInitialized, log])
+  }, [currentFile, pluginsInitialized, log]);
 
   const handleToggleView = useCallback(() => {
     console.log('[App] Toggling view mode:', viewMode, '->', viewMode === 'text' ? 'hex' : 'text')
@@ -213,6 +209,7 @@ function App() {
               <button onClick={handleOpenFile} className="open-btn">
                 Open File
               </button>
+              
               <div className="features">
                 <div className="feature">
                   <span className="icon">📄</span>
