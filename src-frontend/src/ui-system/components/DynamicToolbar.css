@@ -1,0 +1,66 @@
+.toolbar {
+  display: flex;
+  align-items: center;
+  padding: 4px 8px;
+  background-color: #2d2d2d;
+  border-bottom: 1px solid #3d3d3d;
+  gap: 4px;
+  min-height: 40px;
+}
+
+.toolbar-empty {
+  justify-content: center;
+  color: #666;
+  font-style: italic;
+}
+
+.toolbar-placeholder {
+  font-size: 12px;
+}
+
+.toolbar-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  background-color: #3d3d3d;
+  border: 1px solid #4d4d4d;
+  border-radius: 4px;
+  color: #e0e0e0;
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.2s ease;
+}
+
+.toolbar-btn:hover {
+  background-color: #4d4d4d;
+  border-color: #5d5d5d;
+}
+
+.toolbar-btn:active {
+  background-color: #2d2d2d;
+}
+
+.toolbar-icon {
+  font-size: 14px;
+}
+
+.toolbar-label {
+  white-space: nowrap;
+}
+
+/* Primary button style */
+.toolbar-btn.primary {
+  background-color: #007acc;
+  border-color: #0088dd;
+}
+
+.toolbar-btn.primary:hover {
+  background-color: #0088dd;
+}
+
+/* Disabled state */
+.toolbar-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
