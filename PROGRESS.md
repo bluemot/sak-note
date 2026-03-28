@@ -1,5 +1,18 @@
 # SAK Editor - Project Progress
 
+## Documentation Index
+
+| File | Purpose | Status |
+|------|---------|--------|
+| **PROGRESS.md** | This file - Project progress log and development history | ✅ Active |
+| **README.md** | Project overview, quick start, features | ✅ Complete |
+| **TODO.md** | TODO list with 14 items and hour estimates (54-73h) | ✅ Created 2026-03-28 |
+| **FEATURES_IMPLEMENTED.md** | Complete list of implemented features (60+) | ✅ Created 2026-03-28 |
+| **FEATURE_LIST.md** | Feature statistics summary | ✅ Created 2026-03-28 |
+| **UI_MODULE_MAPPING.md** | UI to Module mapping - backend vs frontend gap analysis | ✅ Created 2026-03-28 |
+| **UI_REGISTRY_PLAN.md** | UI Registry Pattern implementation plan with technical gotchas | ✅ Created 2026-03-28 |
+| **SUBAGENT_GUIDE.md** | OpenClaw subagent usage guide (runtime:"subagent") | ✅ Created 2026-03-28 |
+
 ## Project Overview
 A modern cross-platform text editor with:
 - Large file handling (memory-mapped, chunked)

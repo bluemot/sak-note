@@ -1,0 +1,312 @@
+/* DynamicStatusBar - Catppuccin Mocha Theme */
+
+.dynamic-statusbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 28px;
+  background-color: #181825;
+  border-top: 1px solid #313244;
+  color: #a6adc8;
+  font-size: 12px;
+  user-select: none;
+  padding: 0 12px;
+}
+
+/* Sections */
+.statusbar-section {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.statusbar-left {
+  flex: 1;
+  min-width: 0;
+}
+
+.statusbar-center {
+  flex: 2;
+  justify-content: center;
+}
+
+.statusbar-right {
+  flex: 1;
+  justify-content: flex-end;
+}
+
+/* File info */
+.status-file-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 300px;
+}
+
+.status-file-icon {
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.status-file-name {
+  color: #cdd6f4;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status-modified-indicator {
+  color: #fab387;
+  font-size: 10px;
+  flex-shrink: 0;
+}
+
+.status-no-file {
+  color: #6c7086;
+  font-style: italic;
+}
+
+/* Undo/Redo status */
+.status-undo-redo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.status-action {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  transition: all 0.15s ease;
+}
+
+.status-action.active {
+  color: #cdd6f4;
+}
+
+.status-action.inactive {
+  color: #45475a;
+}
+
+/* Status divider */
+.status-divider {
+  width: 1px;
+  height: 14px;
+  background-color: #313244;
+}
+
+/* Status bar items (dynamic) */
+.status-bar-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  background: transparent;
+  border: none;
+  color: #a6adc8;
+  font-size: 11px;
+  cursor: default;
+  border-radius: 3px;
+  transition: all 0.15s ease;
+}
+
+.status-bar-item.clickable {
+  cursor: pointer;
+}
+
+.status-bar-item.clickable:hover {
+  background-color: #313244;
+  color: #cdd6f4;
+}
+
+.status-item-icon {
+  font-size: 12px;
+}
+
+.status-item-label {
+  white-space: nowrap;
+}
+
+/* Selection status */
+.status-selection {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: #89b4fa;
+  font-size: 11px;
+  padding: 2px 8px;
+  background-color: #1e1e2e;
+  border-radius: 3px;
+}
+
+/* Loading indicator */
+.status-loading {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #cba6f7;
+  font-size: 11px;
+}
+
+.loading-spinner {
+  font-size: 12px;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Notifications button */
+.status-notification-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  background: transparent;
+  border: none;
+  color: #6c7086;
+  font-size: 12px;
+  cursor: pointer;
+  border-radius: 3px;
+  transition: all 0.15s ease;
+}
+
+.status-notification-btn:hover {
+  background-color: #313244;
+  color: #cdd6f4;
+}
+
+.status-notification-btn.has-notifications {
+  color: #fab387;
+}
+
+.status-notification-btn.has-notifications:hover {
+  background-color: #fab387;
+  color: #1e1e2e;
+}
+
+.notification-icon {
+  font-size: 14px;
+}
+
+.notification-count {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  background-color: #f38ba8;
+  color: #1e1e2e;
+  font-size: 10px;
+  font-weight: 600;
+  border-radius: 8px;
+  padding: 0 4px;
+}
+
+/* Time display */
+.status-time {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: #6c7086;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 11px;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .dynamic-statusbar {
+    padding: 0 8px;
+    font-size: 11px;
+  }
+
+  .statusbar-section {
+    gap: 8px;
+  }
+
+  .status-file-info {
+    max-width: 150px;
+  }
+
+  .status-file-name {
+    max-width: 100px;
+  }
+
+  .status-undo-redo {
+    display: none;
+  }
+
+  .status-selection {
+    display: none;
+  }
+
+  .status-time {
+    display: none;
+  }
+}
+
+/* Tooltip style (for hover effects) */
+.status-bar-item:hover::after,
+.status-notification-btn:hover::after {
+  content: attr(title);
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: #1e1e2e;
+  color: #cdd6f4;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  white-space: nowrap;
+  z-index: 1000;
+  pointer-events: none;
+  border: 1px solid #313244;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  opacity: 0;
+  animation: tooltipFadeIn 0.15s ease forwards;
+}
+
+@keyframes tooltipFadeIn {
+  to {
+    opacity: 1;
+  }
+}
+
+/* Status item states */
+.status-bar-item.success {
+  color: #a6e3a1;
+}
+
+.status-bar-item.error {
+  color: #f38ba8;
+}
+
+.status-bar-item.warning {
+  color: #fab387;
+}
+
+.status-bar-item.info {
+  color: #89b4fa;
+}
+
+/* Compact mode */
+@media (max-width: 1024px) {
+  .statusbar-section.statusbar-center {
+    gap: 8px;
+  }
+
+  .status-bar-item .status-item-label {
+    max-width: 100px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}

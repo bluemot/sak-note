@@ -50,6 +50,7 @@ export type UISlot =
   | 'menu.edit'           // Edit menu
   | 'menu.view'           // View menu
   | 'menu.tools'          // Tools menu
+  | 'menu.plugins'        // Plugins menu
   | 'dialog.newFile'      // New file dialog
   | 'statusBar.main'      // Main status bar
   | 'tabBar.contextMenu'  // Tab right-click menu

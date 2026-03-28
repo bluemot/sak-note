@@ -1,0 +1,312 @@
+/* DynamicMenuBar - Catppuccin Mocha Theme */
+
+.dynamic-menubar {
+  display: flex;
+  align-items: center;
+  height: 40px;
+  background-color: #181825;
+  border-bottom: 1px solid #313244;
+  color: #cdd6f4;
+  font-size: 13px;
+  user-select: none;
+  -webkit-app-region: drag;
+}
+
+/* Brand section */
+.menubar-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 16px;
+  font-weight: 600;
+  color: #89b4fa;
+  -webkit-app-region: no-drag;
+}
+
+.brand-icon {
+  font-size: 16px;
+}
+
+.brand-text {
+  font-size: 14px;
+  letter-spacing: -0.3px;
+}
+
+/* Menu groups container */
+.menubar-groups {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  -webkit-app-region: no-drag;
+}
+
+/* Menu group */
+.menu-group {
+  position: relative;
+}
+
+.menu-group-trigger {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: transparent;
+  border: none;
+  color: #a6adc8;
+  font-size: 13px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.15s ease;
+  -webkit-app-region: no-drag;
+}
+
+.menu-group-trigger:hover {
+  background-color: #313244;
+  color: #cdd6f4;
+}
+
+.menu-group-trigger.open {
+  background-color: #45475a;
+  color: #cdd6f4;
+}
+
+.menu-group-icon {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.menu-group-title {
+  font-weight: 500;
+}
+
+.menu-group-arrow {
+  font-size: 8px;
+  margin-left: 2px;
+  opacity: 0.6;
+}
+
+/* Dropdown menu */
+.menu-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  min-width: 200px;
+  background-color: #1e1e2e;
+  border: 1px solid #313244;
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  padding: 6px 0;
+  z-index: 1000;
+  animation: menuSlideIn 0.15s ease;
+}
+
+@keyframes menuSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Menu item wrapper */
+.menu-item-wrapper {
+  position: relative;
+}
+
+/* Menu item */
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 14px;
+  background: transparent;
+  border: none;
+  color: #cdd6f4;
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.1s ease;
+}
+
+.menu-item:hover {
+  background-color: #313244;
+}
+
+.menu-item:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.menu-item:disabled:hover {
+  background: transparent;
+}
+
+.menu-item-icon {
+  width: 18px;
+  text-align: center;
+  font-size: 14px;
+  line-height: 1;
+  opacity: 0.8;
+}
+
+.menu-item-title {
+  flex: 1;
+}
+
+.menu-item-shortcut {
+  color: #6c7086;
+  font-size: 11px;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  background-color: #313244;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+/* Submenu styles */
+.menu-item-wrapper.has-submenu {
+  position: relative;
+}
+
+.submenu-trigger {
+  position: relative;
+}
+
+.submenu-arrow {
+  font-size: 10px;
+  color: #6c7086;
+  margin-left: 8px;
+}
+
+/* Submenu */
+.submenu {
+  position: absolute;
+  top: -6px;
+  left: 100%;
+  min-width: 180px;
+  background-color: #1e1e2e;
+  border: 1px solid #313244;
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  padding: 6px 0;
+  z-index: 1001;
+  animation: submenuSlideIn 0.15s ease;
+}
+
+@keyframes submenuSlideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Separator */
+.menu-separator {
+  height: 1px;
+  background-color: #313244;
+  margin: 6px 12px;
+}
+
+/* Spacer */
+.menubar-spacer {
+  flex: 1;
+}
+
+/* Window controls */
+.menubar-actions {
+  display: flex;
+  align-items: center;
+  -webkit-app-region: no-drag;
+}
+
+.menubar-action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 40px;
+  background: transparent;
+  border: none;
+  color: #a6adc8;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.menubar-action-btn:hover {
+  background-color: #313244;
+  color: #cdd6f4;
+}
+
+.menubar-action-btn.close:hover {
+  background-color: #f38ba8;
+  color: #1e1e2e;
+}
+
+/* Scrollbar for long menus */
+.menu-dropdown::-webkit-scrollbar,
+.submenu::-webkit-scrollbar {
+  width: 4px;
+}
+
+.menu-dropdown::-webkit-scrollbar-track,
+.submenu::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.menu-dropdown::-webkit-scrollbar-thumb,
+.submenu::-webkit-scrollbar-thumb {
+  background: #45475a;
+  border-radius: 2px;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .menubar-brand {
+    padding: 0 12px;
+  }
+
+  .brand-text {
+    display: none;
+  }
+
+  .menu-group-trigger {
+    padding: 6px 10px;
+    font-size: 12px;
+  }
+
+  .menu-group-icon {
+    font-size: 16px;
+  }
+
+  .menu-group-title {
+    display: none;
+  }
+
+  .menubar-action-btn {
+    width: 40px;
+  }
+}
+
+/* Active state for menu items */
+.menu-item.active {
+  background-color: #45475a;
+  color: #89b4fa;
+}
+
+/* Highlighted menu items */
+.menu-item.highlight {
+  color: #fab387;
+}
+
+.menu-item.highlight .menu-item-shortcut {
+  background-color: #fab387;
+  color: #1e1e2e;
+}
