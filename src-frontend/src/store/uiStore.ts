@@ -1,12 +1,19 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
+// Notification action type
+export interface NotificationAction {
+  label: string;
+  action: string;
+}
+
 // Notification 類型
 export interface Notification {
   id: string;
   type: 'success' | 'error' | 'info' | 'warning';
   message: string;
   duration?: number;
+  actions?: NotificationAction[];
 }
 
 // UI 狀態介面

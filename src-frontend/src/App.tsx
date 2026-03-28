@@ -10,6 +10,12 @@ import { DynamicSidebar } from './ui-system/components/DynamicSidebar'
 import { DynamicMenuBar } from './ui-system/components/DynamicMenuBar'
 import { DynamicStatusBar } from './ui-system/components/DynamicStatusBar'
 
+// Phase 4: Advanced UI Components
+import { ResizableContainer } from './ui-system/components/ResizableContainer'
+import { NotificationContainer } from './ui-system/components/NotificationContainer'
+import { SearchPanel } from './ui-system/components/SearchPanel'
+import { ShortcutManager } from './ui-system/ShortcutManager'
+
 import './App.css'
 
 // Import plugin service for initialization and logging
@@ -33,6 +39,9 @@ import {
   registerPrintActions
 } from './modules'
 
+// Phase 4: Plugin Loader
+import { loadAllPlugins, triggerHook } from './ui-system/pluginLoader'
+
 interface FileInfo {
   path: string
   size: number
@@ -42,15 +51,50 @@ interface FileInfo {
 
 function App() {
   const [currentFile, setCurrentFile] = useState<FileInfo | null>(null)
-  const [viewMode, setViewMode] = useState<'text' | 'hex'>('text')
+  const [viewMode] = useState<'text' | 'hex'>('text')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [pluginsInitialized, setPluginsInitialized] = useState(false)
+  
+  // Phase 4: Search panel state
+  const [searchQuery] = useState('')
+  const [searchResults] = useState<Array<{
+    id: string
+    line: number
+    column: number
+    text: string
+    context: string
+    filePath?: string
+  }>>([])
+  const [isSearchVisible, setIsSearchVisible] = useState(false)
 
   // Helper for formatted logging
   const log = useCallback((msg: string, ...args: any[]) => {
     console.log(`[${new Date().toISOString()}] ${msg}`, ...args)
   }, [])
+
+  // Phase 4: Initialize ShortcutManager and load plugins
+  useEffect(() => {
+    log('[App] Phase 4: Initializing ShortcutManager...')
+    const shortcutManager = new ShortcutManager()
+    shortcutManager.init()
+    
+    // Register custom shortcuts
+    shortcutManager.register('Ctrl+Shift+F', 'edit:find_in_files', {
+      description: 'Find in Files',
+      preventDefault: true,
+    })
+    shortcutManager.register('Ctrl+Shift+H', 'view:toggle_search_panel', {
+      description: 'Toggle Search Panel',
+      preventDefault: true,
+    })
+    
+    log('[App] ShortcutManager initialized')
+    
+    return () => {
+      shortcutManager.destroy()
+    }
+  }, [log])
 
   // Initialize all modules and plugins on app startup
   useEffect(() => {
@@ -80,18 +124,26 @@ function App() {
         registerPrintActions()
         log('[App] All action handlers registered')
 
-        // Initialize plugins
-        log('[App] initPlugins: Starting plugin initialization...')
-        const result = await pluginService.initializeAndLoadPlugins()
-        log('[App] initPlugins: Plugins initialized:', result)
-        setPluginsInitialized(true)
+        // Phase 4: Load WASM plugins
+        log('[App] Phase 4: Loading plugins...')
+        try {
+          const plugins = await loadAllPlugins('/plugins')
+          log('[App] Plugins loaded:', plugins.length)
+          setPluginsInitialized(true)
+          
+          // Trigger startup hook
+          await triggerHook('onStartup')
+        } catch (pluginErr) {
+          console.warn('[App] Plugin loading failed (optional):', pluginErr)
+          // Plugins are optional, continue anyway
+        }
 
         // Broadcast startup event
-        log('[App] initPlugins: Broadcasting Startup event...')
+        log('[App] Broadcasting Startup event...')
         await pluginService.broadcastEvent('Startup', { timestamp: Date.now() })
-        log('[App] initPlugins: Startup event broadcasted')
+        log('[App] Startup event broadcasted')
       } catch (err) {
-        console.error(`[${new Date().toISOString()}] [App] initPlugins: Failed to initialize:`, err)
+        console.error(`[${new Date().toISOString()}] [App] Failed to initialize:`, err)
         // Don't set error - plugins are optional
       }
     }
@@ -101,9 +153,11 @@ function App() {
     // Cleanup on unmount
     return () => {
       log('[App] Component unmounting...')
+      // Trigger shutdown hook
+      triggerHook('onShutdown').catch((e: any) => console.error('[App] Shutdown hook error:', e))
       // Broadcast shutdown event
       pluginService.broadcastEvent('Shutdown', { timestamp: Date.now() })
-        .catch(e => console.error(`[${new Date().toISOString()}] [App] Failed to broadcast shutdown:`, e))
+        .catch((e: any) => console.error(`[${new Date().toISOString()}] [App] Failed to broadcast shutdown:`, e))
     }
   }, [log])
 
@@ -133,6 +187,8 @@ function App() {
         // Broadcast file opened event to plugins
         if (pluginsInitialized) {
           await pluginService.broadcastEvent('FileOpened', { path: selected });
+          // Phase 4: Trigger plugin hook
+          await triggerHook('onFileOpen', { path: selected });
         }
       }
     } catch (err) {
@@ -144,29 +200,18 @@ function App() {
     }
   }, [pluginsInitialized, log]);
 
-  const handleCloseFile = useCallback(async () => {
-    if (currentFile) {
-      log('[App] handleCloseFile: Closing file:', currentFile.path);
-      try {
-        // Broadcast file closed event
-        if (pluginsInitialized) {
-          await pluginService.broadcastEvent('FileClosed', { path: currentFile.path });
-        }
 
-        await invoke('close_file', { path: currentFile.path });
-        setCurrentFile(null);
-        setError(null);
-      } catch (err) {
-        console.error(`[${new Date().toISOString()}] [App] handleCloseFile: Error closing file:`, err);
-        setError(err instanceof Error ? err.message : String(err));
-      }
-    }
-  }, [currentFile, pluginsInitialized, log]);
-
-  const handleToggleView = useCallback(() => {
-    console.log('[App] Toggling view mode:', viewMode, '->', viewMode === 'text' ? 'hex' : 'text')
-    setViewMode(prev => prev === 'text' ? 'hex' : 'text')
-  }, [viewMode])
+  
+  // Phase 4: Handle search result navigation
+  const handleSearchNavigate = useCallback((direction: 'prev' | 'next') => {
+    log(`[App] Search navigate: ${direction}`);
+  }, [log])
+  
+  // Phase 4: Handle search result click
+  const handleSearchResultClick = useCallback((result: any) => {
+    log('[App] Search result clicked:', result);
+    // Could navigate to the specific location in editor
+  }, [log])
 
   // Log state changes
   useEffect(() => {
@@ -175,17 +220,10 @@ function App() {
       viewMode,
       isLoading,
       hasError: !!error,
-      pluginsInitialized
+      pluginsInitialized,
+      isSearchVisible
     })
-  }, [currentFile, viewMode, isLoading, error, pluginsInitialized, log])
-
-  // These handlers are currently unused but will be connected to action registry in future
-  const _handleCloseFile = handleCloseFile;
-  const _handleToggleView = handleToggleView;
-
-  // Use the underscored variables to prevent TypeScript errors
-  void _handleCloseFile;
-  void _handleToggleView;
+  }, [currentFile, viewMode, isLoading, error, pluginsInitialized, isSearchVisible, log])
 
   // Welcome screen component
   const WelcomeScreen = () => (
@@ -224,6 +262,14 @@ function App() {
           <span className="icon">[plugin]</span>
           <span>Plugin system with WASM support</span>
         </div>
+        <div className="feature">
+          <span className="icon">[resize]</span>
+          <span>Resizable panels</span>
+        </div>
+        <div className="feature">
+          <span className="icon">[search]</span>
+          <span>Enhanced search panel</span>
+        </div>
       </div>
     </div>
   );
@@ -234,7 +280,16 @@ function App() {
       <DynamicToolbar />
 
       <div className="main-container">
-        <DynamicSidebar currentFile={currentFile} />
+        {/* Phase 4: Wrap Sidebar in ResizableContainer */}
+        <ResizableContainer 
+          direction="horizontal"
+          defaultSize={250}
+          minSize={200}
+          maxSize={400}
+          storageKey="sidebar-width"
+        >
+          <DynamicSidebar currentFile={currentFile} />
+        </ResizableContainer>
 
         <div className="editor-container">
           {error && (
@@ -252,6 +307,20 @@ function App() {
           )}
         </div>
       </div>
+
+      {/* Phase 4: Search Panel */}
+      {isSearchVisible && (
+        <SearchPanel 
+          query={searchQuery}
+          results={searchResults}
+          onResultClick={handleSearchResultClick}
+          onNavigate={handleSearchNavigate}
+          onClose={() => setIsSearchVisible(false)}
+        />
+      )}
+
+      {/* Phase 4: Notification Container */}
+      <NotificationContainer position="top-right" />
 
       <DynamicStatusBar />
     </div>

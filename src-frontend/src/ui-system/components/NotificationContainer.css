@@ -1,0 +1,267 @@
+/**
+ * NotificationContainer Styles
+ *
+ * Catppuccin Mocha Theme
+ */
+
+.notification-container {
+  position: fixed;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px;
+  pointer-events: none; /* Let clicks pass through empty areas */
+}
+
+/* Position variants */
+.notification-container--top-right {
+  top: 0;
+  right: 0;
+}
+
+.notification-container--top-left {
+  top: 0;
+  left: 0;
+}
+
+.notification-container--bottom-right {
+  bottom: 0;
+  right: 0;
+  flex-direction: column-reverse;
+}
+
+.notification-container--bottom-left {
+  bottom: 0;
+  left: 0;
+  flex-direction: column-reverse;
+}
+
+.notification-container--top-center {
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.notification-container--bottom-center {
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  flex-direction: column-reverse;
+}
+
+/* Individual Notification */
+.notification {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 16px;
+  min-width: 280px;
+  max-width: 400px;
+  background-color: #313244; /* Catppuccin Mocha surface0 */
+  border-radius: 8px;
+  border-left: 4px solid;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  pointer-events: auto;
+  animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes slideInLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Type variants */
+.notification--success {
+  border-left-color: #a6e3a1; /* Catppuccin Mocha green */
+}
+
+.notification--error {
+  border-left-color: #f38ba8; /* Catppuccin Mocha red */
+}
+
+.notification--warning {
+  border-left-color: #f9e2af; /* Catppuccin Mocha yellow */
+}
+
+.notification--info {
+  border-left-color: #89b4fa; /* Catppuccin Mocha blue */
+}
+
+/* Icon */
+.notification__icon {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: bold;
+}
+
+.notification--success .notification__icon {
+  background-color: rgba(166, 227, 161, 0.2);
+  color: #a6e3a1;
+}
+
+.notification--error .notification__icon {
+  background-color: rgba(243, 139, 168, 0.2);
+  color: #f38ba8;
+}
+
+.notification--warning .notification__icon {
+  background-color: rgba(249, 226, 175, 0.2);
+  color: #f9e2af;
+}
+
+.notification--info .notification__icon {
+  background-color: rgba(137, 180, 250, 0.2);
+  color: #89b4fa;
+}
+
+/* Content */
+.notification__content {
+  flex: 1;
+  min-width: 0;
+}
+
+.notification__message {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #cdd6f4; /* Catppuccin Mocha text */
+  word-wrap: break-word;
+}
+
+/* Actions */
+.notification__actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.notification__action-btn {
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  background-color: #45475a; /* Catppuccin Mocha surface1 */
+  color: #cdd6f4; /* Catppuccin Mocha text */
+  transition: background-color 0.15s ease;
+}
+
+.notification__action-btn:hover {
+  background-color: #585b70; /* Catppuccin Mocha surface2 */
+}
+
+.notification--success .notification__action-btn {
+  background-color: rgba(166, 227, 161, 0.2);
+  color: #a6e3a1;
+}
+
+.notification--success .notification__action-btn:hover {
+  background-color: rgba(166, 227, 161, 0.3);
+}
+
+.notification--error .notification__action-btn {
+  background-color: rgba(243, 139, 168, 0.2);
+  color: #f38ba8;
+}
+
+.notification--error .notification__action-btn:hover {
+  background-color: rgba(243, 139, 168, 0.3);
+}
+
+/* Close button */
+.notification__close {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  margin: -4px -8px -4px 0;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  font-size: 18px;
+  color: #6c7086; /* Catppuccin Mocha overlay0 */
+  cursor: pointer;
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+.notification__close:hover {
+  color: #cdd6f4; /* Catppuccin Mocha text */
+  background-color: #45475a; /* Catppuccin Mocha surface1 */
+}
+
+/* Exit animation */
+.notification--exiting {
+  animation: slideOut 0.3s ease-in forwards;
+}
+
+@keyframes slideOut {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .notification {
+    animation: none;
+  }
+
+  .notification--exiting {
+    animation: none;
+    opacity: 0;
+  }
+}
+
+/* Mobile responsive */
+@media (max-width: 480px) {
+  .notification-container {
+    left: 8px;
+    right: 8px;
+    padding: 8px;
+  }
+
+  .notification {
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .notification-container--top-center,
+  .notification-container--bottom-center {
+    left: 8px;
+    right: 8px;
+    transform: none;
+  }
+}

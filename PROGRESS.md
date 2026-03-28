@@ -31,6 +31,64 @@ A modern cross-platform text editor with:
 
 ## Progress Log
 
+### 2026-03-28 - Phase 4: Advanced UI Features
+
+#### 1. Resizable Panels
+- [x] **ResizableContainer Component** (`ui-system/components/ResizableContainer.tsx`)
+  - Horizontal/vertical resize support
+  - Min/max size constraints (200-400px for sidebar)
+  - localStorage persistence (`sidebar-width` key)
+  - Catppuccin Mocha themed handle with visual feedback
+  - Mouse event handling (mousedown/mousemove/mouseup)
+  - Window resize bounds checking
+
+#### 2. Notification/Toast System Enhanced
+- [x] **NotificationContainer Component** (`ui-system/components/NotificationContainer.tsx`)
+  - Four notification types: success, error, warning, info
+  - Auto-dismiss with configurable duration
+  - Click-to-close functionality
+  - Action buttons support (Undo, Retry, Dismiss)
+  - Position variants: top-right (default), top-left, bottom-right, bottom-left, top-center, bottom-center
+  - Updated uiStore.ts with NotificationAction interface
+  - notify utility object for easy notification creation
+
+#### 3. Plugin Dynamic Loading Foundation
+- [x] **pluginLoader.ts** (`ui-system/pluginLoader.ts`)
+  - Load plugins from JSON manifest (plugin.json)
+  - WASM module loading with import/export handling
+  - UI component registration via uiRegistry
+  - Host API functions: log, error, invoke, emit, getState, alloc, free
+  - Plugin lifecycle: loadPlugin, unloadPlugin, loadAllPlugins
+  - Hook system: triggerHook for file events
+
+#### 4. Keyboard Shortcuts Enhanced
+- [x] **ShortcutManager** (`ui-system/ShortcutManager.ts`)
+  - Global keyboard shortcut registration
+  - Conflict detection between shortcuts
+  - Shortcut hint display via notifications
+  - PreventDefault handling for shortcuts
+  - Integration with ModuleUIRegistry
+  - Input field protection (ignores shortcuts in inputs)
+  - Support for modifier combinations (Ctrl, Shift, Alt, Meta)
+
+#### 5. Search Panel Enhanced
+- [x] **SearchPanel Component** (`ui-system/components/SearchPanel.tsx`)
+  - Collapsible/expandable bottom panel
+  - Result highlighting with mark tags
+  - Click-to-navigate functionality
+  - Previous/Next navigation buttons
+  - Result counter (X / Y)
+  - Filter input for result refinement
+  - Keyboard shortcuts: Escape (close), F3 (next), Shift+F3 (prev)
+  - File location display with line/column numbers
+
+#### Integration in App.tsx
+- [x] ResizableContainer wraps DynamicSidebar
+- [x] NotificationContainer added at top-right position
+- [x] ShortcutManager initialization with custom shortcuts
+- [x] Plugin loader initialization with hooks
+- [x] SearchPanel conditional rendering
+
 ### 2026-03-25 - 完整自動化測試套件 (117 tests passing)
 
 #### Tauri v2 API 兼容性修復

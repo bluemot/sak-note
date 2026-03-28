@@ -1,0 +1,122 @@
+/**
+ * ResizableContainer Styles
+ *
+ * Catppuccin Mocha Theme
+ */
+
+.resizable-container {
+  display: flex;
+  position: relative;
+  box-sizing: border-box;
+  background-color: #1e1e2e; /* Catppuccin Mocha base */
+  overflow: hidden;
+}
+
+.resizable-container--horizontal {
+  flex-direction: row;
+  height: 100%;
+}
+
+.resizable-container--vertical {
+  flex-direction: column;
+  width: 100%;
+}
+
+.resizable-container__content {
+  flex: 1;
+  overflow: auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* Resize Handle */
+.resizable-container__handle {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  background-color: transparent;
+  transition: background-color 0.15s ease;
+}
+
+.resizable-container__handle:hover,
+.resizing .resizable-container__handle {
+  background-color: #313244; /* Catppuccin Mocha surface0 */
+}
+
+.resizable-container__handle--horizontal {
+  top: 0;
+  right: 0;
+  width: 6px;
+  height: 100%;
+  cursor: col-resize;
+}
+
+.resizable-container__handle--vertical {
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 6px;
+  cursor: row-resize;
+}
+
+/* Handle Indicator (visual line) */
+.resizable-container__handle-indicator {
+  background-color: #6c7086; /* Catppuccin Mocha overlay0 */
+  transition: background-color 0.15s ease;
+}
+
+.resizable-container__handle:hover .resizable-container__handle-indicator,
+.resizing .resizable-container__handle-indicator {
+  background-color: #cba6f7; /* Catppuccin Mocha mauve */
+}
+
+.resizable-container__handle--horizontal .resizable-container__handle-indicator {
+  width: 2px;
+  height: 40px;
+  border-radius: 1px;
+}
+
+.resizable-container__handle--vertical .resizable-container__handle-indicator {
+  width: 40px;
+  height: 2px;
+  border-radius: 1px;
+}
+
+/* Body classes during resize */
+body.resizing {
+  user-select: none;
+}
+
+body.resizing-horizontal {
+  cursor: col-resize !important;
+}
+
+body.resizing-vertical {
+  cursor: row-resize !important;
+}
+
+body.resizing * {
+  cursor: inherit !important;
+}
+
+/* Active resize state */
+.resizable-container.resizing {
+  pointer-events: none;
+}
+
+.resizable-container.resizing .resizable-container__content {
+  opacity: 0.8;
+}
+
+/* Animation for smooth resize (optional) */
+@media (prefers-reduced-motion: no-preference) {
+  .resizable-container {
+    transition: width 0.1s ease-out, height 0.1s ease-out;
+  }
+
+  .resizing .resizable-container {
+    transition: none;
+  }
+}
