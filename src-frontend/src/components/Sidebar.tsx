@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import LlmChat from './LlmChat'
 import SemanticPanel from './SemanticPanel'
+import MarkPanel from './MarkPanel'
 import './Sidebar.css'
 
 interface SidebarProps {
@@ -95,9 +96,7 @@ function Sidebar({ currentFile }: SidebarProps) {
         )}
 
         {activeTab === 'marks' && (
-          <div className="marks-panel">
-            <p className="placeholder">Color highlights will appear here</p>
-          </div>
+          <MarkPanel filePath={currentFile?.path || null} />
         )}
       </div>
     </div>
