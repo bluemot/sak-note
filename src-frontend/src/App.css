@@ -89,3 +89,33 @@
 .feature .icon {
   font-size: 20px;
 }
+
+/* Plugin status indicator */
+.plugin-status {
+  margin-bottom: 24px;
+}
+
+.plugin-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background-color: #313244;
+  border-radius: 20px;
+  font-size: 13px;
+  color: #a6e3a1;
+}
+
+.plugin-indicator::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  background-color: #a6e3a1;
+  border-radius: 50%;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}

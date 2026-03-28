@@ -109,7 +109,7 @@ export const useUIStore = create<UIState>()(
     {
       name: 'sak-editor-ui-store',
       // 只持續化部分狀態
-      partialize: (state) => ({
+      partialize: (_state) => ({
         // 檔案相關不持續化（重啟時應該從頭開始）
         // 只持續化設定
       }),

@@ -1,3 +1,9 @@
+/* Dynamic UI Component Styles - Must be at the top */
+@import './ui-system/components/DynamicToolbar.css';
+@import './ui-system/components/DynamicSidebar.css';
+@import './ui-system/components/DynamicMenuBar.css';
+@import './ui-system/components/DynamicStatusBar.css';
+
 :root {
   font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   line-height: 1.5;

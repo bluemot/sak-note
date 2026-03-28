@@ -1,4 +1,4 @@
-import React, { Suspense, lazy } from 'react';
+import React from 'react';
 import { UIComponentDefinition, uiRegistry } from '../ModuleUIRegistry';
 import { useCondition } from '../hooks/useCondition';
 import { actionRegistry } from '../actions/actionRegistry';

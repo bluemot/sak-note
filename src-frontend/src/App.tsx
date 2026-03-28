@@ -3,8 +3,13 @@ import { open } from '@tauri-apps/plugin-dialog'
 import { invoke } from '@tauri-apps/api/core'
 import Editor from './components/Editor'
 import HexViewer from './components/HexViewer'
-import Sidebar from './components/Sidebar'
-import Toolbar from './components/Toolbar'
+
+// Import dynamic UI components from ui-system
+import { DynamicToolbar } from './ui-system/components/DynamicToolbar'
+import { DynamicSidebar } from './ui-system/components/DynamicSidebar'
+import { DynamicMenuBar } from './ui-system/components/DynamicMenuBar'
+import { DynamicStatusBar } from './ui-system/components/DynamicStatusBar'
+
 import './App.css'
 
 // Import plugin service for initialization and logging
@@ -50,7 +55,7 @@ function App() {
   // Initialize all modules and plugins on app startup
   useEffect(() => {
     log('[App] Component mounted, initializing modules...')
-    
+
     const initAll = async () => {
       try {
         // Register UI modules
@@ -63,7 +68,7 @@ function App() {
         registerLlmModule()
         registerPrintModule()
         log('[App] All UI modules registered')
-        
+
         // Register action handlers
         log('[App] Registering action handlers...')
         registerFileActions()
@@ -74,13 +79,13 @@ function App() {
         registerLlmActions()
         registerPrintActions()
         log('[App] All action handlers registered')
-        
+
         // Initialize plugins
         log('[App] initPlugins: Starting plugin initialization...')
         const result = await pluginService.initializeAndLoadPlugins()
         log('[App] initPlugins: Plugins initialized:', result)
         setPluginsInitialized(true)
-        
+
         // Broadcast startup event
         log('[App] initPlugins: Broadcasting Startup event...')
         await pluginService.broadcastEvent('Startup', { timestamp: Date.now() })
@@ -90,9 +95,9 @@ function App() {
         // Don't set error - plugins are optional
       }
     }
-    
+
     initAll()
-    
+
     // Cleanup on unmount
     return () => {
       log('[App] Component unmounting...')
@@ -104,11 +109,11 @@ function App() {
 
   const handleOpenFile = useCallback(async () => {
     log(`[App::handleOpenFile] === OPEN FILE WORKFLOW STARTED ===`);
-    
+
     try {
       setIsLoading(true);
       setError(null);
-      
+
       const selected = await open({
         multiple: false,
         filters: [
@@ -117,14 +122,14 @@ function App() {
           { name: 'Code Files', extensions: ['c', 'cpp', 'h', 'hpp', 'java', 'go', 'rb', 'php'] },
         ]
       });
-      
+
       if (selected && typeof selected === 'string') {
         log(`[App::handleOpenFile] Opening file: ${selected}`);
-        
+
         const fileInfo = await invoke<FileInfo>('open_file', { path: selected });
-        
+
         setCurrentFile(fileInfo);
-        
+
         // Broadcast file opened event to plugins
         if (pluginsInitialized) {
           await pluginService.broadcastEvent('FileOpened', { path: selected });
@@ -147,7 +152,7 @@ function App() {
         if (pluginsInitialized) {
           await pluginService.broadcastEvent('FileClosed', { path: currentFile.path });
         }
-        
+
         await invoke('close_file', { path: currentFile.path });
         setCurrentFile(null);
         setError(null);
@@ -174,65 +179,72 @@ function App() {
     })
   }, [currentFile, viewMode, isLoading, error, pluginsInitialized, log])
 
+  // These handlers are currently unused but will be connected to action registry in future
+  const _handleCloseFile = handleCloseFile;
+  const _handleToggleView = handleToggleView;
+
+  // Use the underscored variables to prevent TypeScript errors
+  void _handleCloseFile;
+  void _handleToggleView;
+
+  // Welcome screen component
+  const WelcomeScreen = () => (
+    <div className="welcome-screen">
+      <h1>SAK Editor</h1>
+      <p>A modern editor for large files with LLM integration</p>
+
+      {pluginsInitialized && (
+        <div className="plugin-status">
+          <span className="plugin-indicator">Plugins Active</span>
+        </div>
+      )}
+
+      <button onClick={handleOpenFile} className="open-btn">
+        Open File
+      </button>
+
+      <div className="features">
+        <div className="feature">
+          <span className="icon">[file]</span>
+          <span>Large file support (memory-mapped)</span>
+        </div>
+        <div className="feature">
+          <span className="icon">[hex]</span>
+          <span>Hex viewer mode</span>
+        </div>
+        <div className="feature">
+          <span className="icon">[llm]</span>
+          <span>LLM chat & summary</span>
+        </div>
+        <div className="feature">
+          <span className="icon">[color]</span>
+          <span>Color highlighting</span>
+        </div>
+        <div className="feature">
+          <span className="icon">[plugin]</span>
+          <span>Plugin system with WASM support</span>
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <div className="app">
-      <Toolbar
-        onOpenFile={handleOpenFile}
-        onCloseFile={handleCloseFile}
-        onToggleView={handleToggleView}
-        viewMode={viewMode}
-        hasFile={!!currentFile}
-        isLoading={isLoading}
-      />
-      
+      <DynamicMenuBar />
+      <DynamicToolbar />
+
       <div className="main-container">
-        <Sidebar currentFile={currentFile} />
-        
+        <DynamicSidebar currentFile={currentFile} />
+
         <div className="editor-container">
           {error && (
             <div className="error-banner">
               Error: {error}
             </div>
           )}
-          
+
           {!currentFile ? (
-            <div className="welcome-screen">
-              <h1>SAK Editor</h1>
-              <p>A modern editor for large files with LLM integration</p>
-              
-              {pluginsInitialized && (
-                <div className="plugin-status">
-                  <span className="plugin-indicator">🔌 Plugins Active</span>
-                </div>
-              )}
-              
-              <button onClick={handleOpenFile} className="open-btn">
-                Open File
-              </button>
-              
-              <div className="features">
-                <div className="feature">
-                  <span className="icon">📄</span>
-                  <span>Large file support (memory-mapped)</span>
-                </div>
-                <div className="feature">
-                  <span className="icon">🔍</span>
-                  <span>Hex viewer mode</span>
-                </div>
-                <div className="feature">
-                  <span className="icon">🤖</span>
-                  <span>LLM chat & summary</span>
-                </div>
-                <div className="feature">
-                  <span className="icon">🎨</span>
-                  <span>Color highlighting</span>
-                </div>
-                <div className="feature">
-                  <span className="icon">🔌</span>
-                  <span>Plugin system with WASM support</span>
-                </div>
-              </div>
-            </div>
+            <WelcomeScreen />
           ) : viewMode === 'text' ? (
             <Editor filePath={currentFile.path} fileSize={currentFile.size} />
           ) : (
@@ -240,6 +252,8 @@ function App() {
           )}
         </div>
       </div>
+
+      <DynamicStatusBar />
     </div>
   )
 }

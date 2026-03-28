@@ -1,5 +1,4 @@
 import { useUIStore, evaluateCondition, UIState } from '../../store/uiStore';
-import { useEffect, useState } from 'react';
 
 /**
  * React Hook: 訂閱條件狀態變化
