@@ -128,6 +128,7 @@ const MenuGroup: React.FC<MenuGroupProps> = ({
   onClose,
 }) => {
   const components = uiRegistry.getComponentsForSlot(slot);
+  const menuItems = uiRegistry.getMenuItemsForSlot(slot);
   const menuRef = useRef<HTMLDivElement>(null);
 
   // Close when clicking outside
@@ -147,7 +148,7 @@ const MenuGroup: React.FC<MenuGroupProps> = ({
     };
   }, [isOpen, onClose]);
 
-  if (components.length === 0) return null;
+  if (components.length === 0 && menuItems.length === 0) return null;
 
   const menuIcon = iconMap[icon || ''] || icon || '';
 
@@ -169,6 +170,28 @@ const MenuGroup: React.FC<MenuGroupProps> = ({
 
       {isOpen && (
         <div className="menu-dropdown open">
+          {menuItems.map((item, index) => {
+            if (item.type === 'separator') {
+              return <div key={`sep-${index}`} className="menu-separator" />;
+            }
+            const menuItemComponent: UIComponentDefinition = {
+              id: item.id,
+              type: 'menu_item',
+              slot: slot,
+              module: 'menu',
+              title: item.title || '',
+              action: item.action,
+              shortcut: item.shortcut,
+              icon: item.icon,
+            };
+            return (
+              <MenuItem
+                key={`menu-item-${item.id}-${index}`}
+                item={menuItemComponent}
+                onClose={onClose}
+              />
+            );
+          })}
           {components.map((component) => (
             <MenuItem
               key={`${component.module}:${component.id}`}

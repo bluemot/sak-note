@@ -4,7 +4,15 @@ export function registerEditorMenuModule() {
   uiRegistry.registerModule({
     module: 'editor-menu',
     version: '1.0',
-    components: [],
+    components: [
+      {
+        id: 'editor-menu-trigger',
+        type: 'menu_item',
+        slot: 'menu.editor',
+        title: 'Editor',
+        module: 'editor-menu'
+      }
+    ],
     menus: [
       {
         id: 'editor-menu',

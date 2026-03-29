@@ -189,6 +189,23 @@ class ModuleUIRegistry {
     return results.sort((a, b) => (a.order || 999) - (b.order || 999))
   }
   
+  // Get menu items for a specific slot
+  getMenuItemsForSlot(slot: UISlot): MenuItemDefinition[] {
+    const results: MenuItemDefinition[] = []
+    
+    this.modules.forEach(module => {
+      if (module.menus) {
+        module.menus.forEach(menu => {
+          if (menu.slot === slot && menu.items) {
+            results.push(...menu.items)
+          }
+        })
+      }
+    })
+    
+    return results
+  }
+  
   // Get component by ID
   getComponent(moduleId: string, componentId: string): UIComponentDefinition | undefined {
     return this.components.get(`${moduleId}:${componentId}`)
