@@ -124,6 +124,41 @@ fi
 echo -e "${GREEN}Prerequisites OK${NC}"
 echo ""
 
+# Check if SAK Editor is already running, start if not
+echo "Checking SAK Editor..."
+WINDOW_ID=$(xdotool search --name "SAK Editor" 2>/dev/null | head -1 || echo "")
+if [ -z "$WINDOW_ID" ]; then
+    echo "Starting SAK Editor..."
+    export DISPLAY=${DISPLAY:-:1}
+    export GSK_RENDERER=cairo
+    export LIBGL_ALWAYS_SOFTWARE=1
+    export WEBKIT_DISABLE_COMPOSITING_MODE=1
+    cd "$PROJECT_DIR"
+    ./src-tauri/target/release/sak-editor &
+    APP_PID=$!
+    echo "Started with PID: $APP_PID"
+    
+    # Wait for window
+    echo "Waiting for window..."
+    for i in {1..30}; do
+        WINDOW_ID=$(xdotool search --name "SAK Editor" 2>/dev/null | head -1 || echo "")
+        if [ -n "$WINDOW_ID" ]; then
+            echo "Window ready: $WINDOW_ID"
+            break
+        fi
+        sleep 1
+    done
+    
+    if [ -z "$WINDOW_ID" ]; then
+        echo -e "${RED}Failed to start SAK Editor${NC}"
+        exit 1
+    fi
+    sleep 2
+else
+    echo "SAK Editor already running: $WINDOW_ID"
+fi
+echo ""
+
 # Initialize test framework
 source "$SCRIPT_DIR/test-framework.sh"
 
