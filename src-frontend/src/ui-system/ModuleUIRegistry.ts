@@ -47,6 +47,7 @@ export type UISlot =
   | 'editor.contextMenu'   // Editor right-click menu
   | 'editor.statusBar'     // Editor status bar
   | 'menu.file'           // File menu
+  | 'menu.editor'         // Editor menu
   | 'menu.edit'           // Edit menu
   | 'menu.view'           // View menu
   | 'menu.tools'          // Tools menu

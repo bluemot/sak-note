@@ -36,7 +36,9 @@ import {
   registerLlmModule,
   registerLlmActions,
   registerPrintModule,
-  registerPrintActions
+  registerPrintActions,
+  registerEditorMenuModule,
+  registerEditorMenuActions
 } from './modules'
 
 // Phase 4: Plugin Loader
@@ -111,6 +113,7 @@ function App() {
         registerBookmarkModule()
         registerLlmModule()
         registerPrintModule()
+        registerEditorMenuModule()
         log('[App] All UI modules registered')
 
         // Register action handlers
@@ -122,6 +125,7 @@ function App() {
         registerBookmarkActions()
         registerLlmActions()
         registerPrintActions()
+        registerEditorMenuActions()
         log('[App] All action handlers registered')
 
         // Phase 4: Load WASM plugins

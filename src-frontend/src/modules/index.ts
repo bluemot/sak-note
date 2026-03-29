@@ -27,3 +27,7 @@ export { registerLlmActions } from './llm/actions';
 // Print Module
 export { registerPrintModule } from './print';
 export { registerPrintActions } from './print/actions';
+
+// Editor Menu Module
+export { registerEditorMenuModule } from './editor-menu';
+export { registerEditorMenuActions } from './editor-menu/actions';

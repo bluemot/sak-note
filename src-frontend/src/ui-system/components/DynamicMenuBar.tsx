@@ -228,6 +228,14 @@ export const DynamicMenuBar: React.FC = () => {
           onClose={handleClose}
         />
         <MenuGroup
+          slot="menu.editor"
+          title="Editor"
+          icon="editor"
+          isOpen={openMenu === 'editor'}
+          onToggle={() => handleToggle('editor')}
+          onClose={handleClose}
+        />
+        <MenuGroup
           slot="menu.edit"
           title="Edit"
           icon="edit"
