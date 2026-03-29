@@ -10,6 +10,8 @@ PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 REPORT_DIR="/tmp/sak-e2e"
 REPORT_FILE="$REPORT_DIR/test-report.json"
 APP_NAME="SAK Editor"
+# Also try partial match for window detection
+APP_NAME_ALT="Editor"
 WINDOW_ID=""
 TEST_RESULTS=()
 CURRENT_CATEGORY=""
@@ -132,7 +134,25 @@ assert_exists() {
 # ============================================================================
 
 get_window_id() {
-    xdotool search --name "$APP_NAME" 2>/dev/null | head -1
+    # Try exact match first
+    local wid=$(xdotool search --name "$APP_NAME" 2>/dev/null | head -1)
+    if [ -n "$wid" ]; then
+        echo "$wid"
+        return 0
+    fi
+    # Try partial match
+    wid=$(xdotool search --name "$APP_NAME_ALT" 2>/dev/null | grep -v "sak-editor : bash" | head -1)
+    if [ -n "$wid" ]; then
+        echo "$wid"
+        return 0
+    fi
+    # Try finding by class or other means
+    wid=$(xdotool search --class "sak-editor" 2>/dev/null | head -1)
+    if [ -n "$wid" ]; then
+        echo "$wid"
+        return 0
+    fi
+    return 1
 }
 
 focus_window() {

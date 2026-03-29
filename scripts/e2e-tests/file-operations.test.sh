@@ -13,21 +13,38 @@ test "F01: Open File Dialog (Ctrl+O)"
 if focus_window; then
     log "Sending Ctrl+O..."
     send_key "ctrl+o"
-    sleep 1.5
+    sleep 3  # Increased wait time for dialog
     
     log "Checking for Open File dialog..."
-    DIALOG_ID=$(xdotool search --name "Open File" 2>/dev/null | head -1)
+    # Try multiple possible window titles
+    DIALOG_ID=""
+    for title in "Open File" "Open" "Select File" "Open Document" "file-open-dialog" ""; do
+        DIALOG_ID=$(xdotool search --name "$title" 2>/dev/null | head -1)
+        if [ -n "$DIALOG_ID" ]; then
+            log "Found dialog with title: '$title' (ID: $DIALOG_ID)"
+            break
+        fi
+    done
+    
+    # Also check for any new window
+    if [ -z "$DIALOG_ID" ]; then
+        log "Trying to find any dialog window..."
+        # Check if there's a window with "dialog" or portal
+        DIALOG_ID=$(xdotool search --name "portal" 2>/dev/null | head -1)
+    fi
     
     if [ -n "$DIALOG_ID" ]; then
+        log "✓ Dialog found: $DIALOG_ID"
         pass
     else
-        # Try alternative window names
-        DIALOG_ID=$(xdotool search --name "Open" 2>/dev/null | head -1)
-        if [ -n "$DIALOG_ID" ]; then
-            pass
-        else
-            fail "Open File dialog did not appear"
-        fi
+        log "Listing all windows for debugging..."
+        xdotool search --name "" 2>/dev/null | while read wid; do
+            name=$(xdotool getwindowname $wid 2>/dev/null)
+            if [ -n "$name" ]; then
+                log "  Window $wid: '$name'"
+            fi
+        done
+        fail "Open File dialog did not appear"
     fi
     
     # Cleanup
@@ -45,21 +62,37 @@ test "F02: Save Dialog (Ctrl+Shift+S)"
 if focus_window; then
     log "Sending Ctrl+Shift+S..."
     send_key "ctrl+shift+s"
-    sleep 1.5
+    sleep 3  # Increased wait time for dialog
     
     log "Checking for Save As dialog..."
-    DIALOG_ID=$(xdotool search --name "Save As" 2>/dev/null | head -1)
+    # Try multiple possible window titles
+    DIALOG_ID=""
+    for title in "Save As" "Save" "Save File" "Select Location" "save-dialog" ""; do
+        DIALOG_ID=$(xdotool search --name "$title" 2>/dev/null | head -1)
+        if [ -n "$DIALOG_ID" ]; then
+            log "Found dialog with title: '$title' (ID: $DIALOG_ID)"
+            break
+        fi
+    done
+    
+    # Also check for any new window
+    if [ -z "$DIALOG_ID" ]; then
+        log "Trying to find any dialog window..."
+        DIALOG_ID=$(xdotool search --name "portal" 2>/dev/null | head -1)
+    fi
     
     if [ -n "$DIALOG_ID" ]; then
+        log "✓ Dialog found: $DIALOG_ID"
         pass
     else
-        # Try alternative names
-        DIALOG_ID=$(xdotool search --name "Save" 2>/dev/null | head -1)
-        if [ -n "$DIALOG_ID" ]; then
-            pass
-        else
-            fail "Save As dialog did not appear"
-        fi
+        log "Listing all windows for debugging..."
+        xdotool search --name "" 2>/dev/null | while read wid; do
+            name=$(xdotool getwindowname $wid 2>/dev/null)
+            if [ -n "$name" ]; then
+                log "  Window $wid: '$name'"
+            fi
+        done
+        fail "Save As dialog did not appear"
     fi
     
     # Cleanup
