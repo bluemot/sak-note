@@ -2,6 +2,7 @@ import { actionRegistry } from '../../ui-system/actions/actionRegistry';
 import { useUIStore } from '../../store/uiStore';
 import { invoke } from '@tauri-apps/api/core';
 import { open, save } from '@tauri-apps/plugin-dialog';
+import { useDialogStore } from '../../store/dialogStore';
 
 export function registerMarksActions() {
   // Create mark at current position
@@ -13,10 +14,40 @@ export function registerMarksActions() {
       const { currentFilePath } = useUIStore.getState();
       if (!currentFilePath) throw new Error('No file open');
 
+      // If label is not provided, open input dialog to ask for it
+      let label = params?.label;
+      if (!label) {
+        return new Promise((resolve, reject) => {
+          useDialogStore.getState().openDialog('input', {
+            title: 'Create Mark',
+            placeholder: 'Enter mark name...',
+            onConfirm: async (value: string) => {
+              try {
+                const result = await invoke('marks_create', {
+                  file_path: currentFilePath,
+                  position: params?.position,
+                  label: value
+                });
+
+                useUIStore.getState().addNotification({
+                  type: 'success',
+                  message: 'Mark created successfully',
+                  duration: 2000
+                });
+
+                resolve(result);
+              } catch (error) {
+                reject(error);
+              }
+            }
+          });
+        });
+      }
+
       const result = await invoke('marks_create', {
         file_path: currentFilePath,
         position: params?.position,
-        label: params?.label || 'Mark'
+        label: label || 'Mark'
       });
 
       useUIStore.getState().addNotification({

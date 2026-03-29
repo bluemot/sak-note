@@ -1,4 +1,5 @@
 import { actionRegistry } from '../../ui-system/actions/actionRegistry';
+import { useDialogStore } from '../../store/dialogStore';
 
 export function registerEditorMenuActions() {
   // Toggle Word Wrap
@@ -45,6 +46,13 @@ export function registerEditorMenuActions() {
 
   // Command Palette
   actionRegistry.register('editor', 'command_palette', async () => {
-    console.log('[Editor Menu] Open command palette');
+    try {
+      // Open command palette via dialog store
+      useDialogStore.getState().openDialog('commandPalette');
+      return { success: true };
+    } catch (error) {
+      console.error('[Editor Menu] Command Palette failed:', error);
+      throw error;
+    }
   });
 }

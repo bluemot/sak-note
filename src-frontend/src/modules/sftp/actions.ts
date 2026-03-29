@@ -1,6 +1,7 @@
 import { actionRegistry } from '../../ui-system/actions/actionRegistry';
 import { useUIStore } from '../../store/uiStore';
 import { invoke } from '@tauri-apps/api/core';
+import { useDialogStore } from '../../store/dialogStore';
 
 export function registerSftpActions() {
   // Connect to SFTP server
@@ -69,12 +70,8 @@ export function registerSftpActions() {
   // Site manager
   actionRegistry.register('sftp', 'site_manager', async () => {
     try {
-      // Open site manager dialog
-      useUIStore.getState().addNotification({
-        type: 'info',
-        message: 'Site Manager opened',
-        duration: 2000
-      });
+      // Open site manager dialog via dialog store
+      useDialogStore.getState().openDialog('sftpSiteManager');
       return { success: true };
     } catch (error) {
       console.error('[SFTP Actions] Site Manager failed:', error);

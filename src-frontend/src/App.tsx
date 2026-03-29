@@ -16,7 +16,16 @@ import { NotificationContainer } from './ui-system/components/NotificationContai
 import { SearchPanel } from './ui-system/components/SearchPanel'
 import { ShortcutManager } from './ui-system/ShortcutManager'
 
+// Dialog Components
+import { SftpSiteManagerDialog } from './components/SftpSiteManagerDialog'
+import { AISettingsDialog } from './components/AISettingsDialog'
+import { CommandPalette } from './components/CommandPalette'
+import { InputDialog } from './components/InputDialog'
+
 import './App.css'
+
+// Dialog store
+import { useDialogStore } from './store/dialogStore'
 
 // Import plugin service for initialization and logging
 import * as pluginService from './services/pluginService'
@@ -57,6 +66,9 @@ function App() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [pluginsInitialized, setPluginsInitialized] = useState(false)
+  
+  // Dialog state from store
+  const { activeDialog, dialogProps, closeDialog } = useDialogStore()
   
   // Phase 4: Search panel state
   const [searchQuery] = useState('')
@@ -325,6 +337,39 @@ function App() {
 
       {/* Phase 4: Notification Container */}
       <NotificationContainer position="top-right" />
+
+      {/* Dialog Components */}
+      <SftpSiteManagerDialog
+        isOpen={activeDialog === 'sftpSiteManager'}
+        onClose={closeDialog}
+        onConnect={(site) => {
+          console.log('[App] Connecting to SFTP site:', site);
+          closeDialog();
+        }}
+      />
+
+      <AISettingsDialog
+        isOpen={activeDialog === 'aiSettings'}
+        onClose={closeDialog}
+        onSave={(settings) => {
+          console.log('[App] AI Settings saved:', settings);
+        }}
+      />
+
+      <CommandPalette
+        isOpen={activeDialog === 'commandPalette'}
+        onClose={closeDialog}
+      />
+
+      <InputDialog
+        isOpen={activeDialog === 'input'}
+        onClose={closeDialog}
+        onConfirm={dialogProps?.onConfirm || (() => {})}
+        title={dialogProps?.title || 'Input'}
+        placeholder={dialogProps?.placeholder}
+        defaultValue={dialogProps?.defaultValue}
+        validate={dialogProps?.validate}
+      />
 
       <DynamicStatusBar />
     </div>

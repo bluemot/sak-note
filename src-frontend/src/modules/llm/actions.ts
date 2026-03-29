@@ -1,6 +1,7 @@
 import { actionRegistry } from '../../ui-system/actions/actionRegistry';
 import { useUIStore } from '../../store/uiStore';
 import { invoke } from '@tauri-apps/api/core';
+import { useDialogStore } from '../../store/dialogStore';
 
 export function registerLlmActions() {
   // Open chat
@@ -64,12 +65,8 @@ export function registerLlmActions() {
   // Open settings
   actionRegistry.register('llm', 'settings', async () => {
     try {
-      // Open LLM settings dialog
-      useUIStore.getState().addNotification({
-        type: 'info',
-        message: 'AI Settings opened',
-        duration: 2000
-      });
+      // Open LLM settings dialog via dialog store
+      useDialogStore.getState().openDialog('aiSettings');
       return { success: true };
     } catch (error) {
       console.error('[LLM Actions] Settings failed:', error);

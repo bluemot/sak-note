@@ -7,6 +7,7 @@ import './DynamicMenuBar.css';
 // Icon mapping for menu items
 const iconMap: Record<string, string> = {
   'file': '📄',
+  'editor': '📝',
   'edit': '✏️',
   'view': '👁️',
   'settings': '⚙️',
