@@ -161,7 +161,19 @@ class ModuleUIRegistry {
       this.components.set(`${registration.module}:${component.id}`, component)
     })
     
-    console.log(`[UI Registry] Registered module: ${registration.module} with ${registration.components.length} components`)
+    console.log(`[Registry] Module ${registration.module}: ${registration.components.length} components, ${registration.menus?.length || 0} menus`)
+    
+    // Log menus for debugging
+    if (registration.menus && registration.menus.length > 0) {
+      registration.menus.forEach(menu => {
+        console.log(`[Registry]  Menu: ${menu.id} in slot ${menu.slot} with ${menu.items.length} items`)
+      })
+    }
+    
+    // Dispatch event to notify listeners
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('ui-registry-change', { detail: { module: registration.module } }))
+    }
   }
   
   // Unregister module
@@ -192,17 +204,22 @@ class ModuleUIRegistry {
   // Get menu items for a specific slot
   getMenuItemsForSlot(slot: UISlot): MenuItemDefinition[] {
     const results: MenuItemDefinition[] = []
+    let moduleCount = 0
+    let menuCount = 0
     
     this.modules.forEach(module => {
+      moduleCount++
       if (module.menus) {
         module.menus.forEach(menu => {
           if (menu.slot === slot && menu.items) {
             results.push(...menu.items)
+            menuCount++
           }
         })
       }
     })
     
+    console.log(`[Registry] getMenuItemsForSlot('${slot}'): scanned ${moduleCount} modules, found ${menuCount} menus, returning ${results.length} items`)
     return results
   }
   
@@ -282,6 +299,25 @@ export function useSlotComponents(slot: UISlot): UIComponentDefinition[] {
   }, [slot])
   
   return components
+}
+
+// React hook for menu items
+export function useSlotMenuItems(slot: UISlot): MenuItemDefinition[] {
+  const [menuItems, setMenuItems] = useState<MenuItemDefinition[]>([])
+  
+  useEffect(() => {
+    setMenuItems(uiRegistry.getMenuItemsForSlot(slot))
+    
+    // Listen for registry changes
+    const handleRegistryChange = () => {
+      setMenuItems(uiRegistry.getMenuItemsForSlot(slot))
+    }
+    
+    window.addEventListener('ui-registry-change', handleRegistryChange)
+    return () => window.removeEventListener('ui-registry-change', handleRegistryChange)
+  }, [slot])
+  
+  return menuItems
 }
 
 // Hook for executing actions

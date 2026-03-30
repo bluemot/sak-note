@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { UIComponentDefinition, uiRegistry, UISlot } from '../ModuleUIRegistry';
+import { UIComponentDefinition, uiRegistry, UISlot, useSlotComponents, useSlotMenuItems } from '../ModuleUIRegistry';
 import { useCondition } from '../hooks/useCondition';
 import { actionRegistry } from '../actions/actionRegistry';
 import './DynamicMenuBar.css';
@@ -128,9 +128,12 @@ const MenuGroup: React.FC<MenuGroupProps> = ({
   onToggle,
   onClose,
 }) => {
-  const components = uiRegistry.getComponentsForSlot(slot);
-  const menuItems = uiRegistry.getMenuItemsForSlot(slot);
+  // Use hooks to get reactive updates when modules register
+  const components = useSlotComponents(slot);
+  const menuItems = useSlotMenuItems(slot);
   const menuRef = useRef<HTMLDivElement>(null);
+  
+  console.log(`[MenuGroup] slot=${slot}, components=${components.length}, menuItems=${menuItems.length}`);
 
   // Close when clicking outside
   useEffect(() => {
