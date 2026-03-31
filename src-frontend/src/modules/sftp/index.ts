@@ -32,20 +32,68 @@ export function registerSftpModule() {
         title: '🌐 SFTP Sites',
         icon: '🌐',
         order: 50
-      }
-    ],
-    menus: [
+      },
+      // SFTP Submenu in Tools menu
       {
-        id: 'sftp-menu',
+        id: 'sftp-submenu',
+        type: 'menu_submenu',
         slot: 'menu.tools',
+        module: 'sftp',
         title: 'SFTP',
-        items: [
-          { id: 'connect', type: 'item', title: 'Connect to Server...', action: 'sftp:connect', shortcut: 'Ctrl+Shift+C' },
-          { id: 'open-remote', type: 'item', title: 'Open Remote File...', action: 'sftp:open_remote', shortcut: 'Ctrl+Shift+O' },
-          { id: 'sep1', type: 'separator' },
-          { id: 'site-manager', type: 'item', title: 'Site Manager', action: 'sftp:site_manager' },
-          { id: 'disconnect', type: 'item', title: 'Disconnect', action: 'sftp:disconnect' }
-        ]
+        icon: '🌐',
+        order: 100
+      },
+      // SFTP submenu items - using group to link to parent submenu
+      {
+        id: 'sftp-connect',
+        type: 'menu_item',
+        slot: 'menu.tools',
+        module: 'sftp',
+        title: 'Connect to Server...',
+        action: 'sftp:connect',
+        shortcut: 'Ctrl+Shift+C',
+        group: 'sftp-submenu',
+        order: 1
+      },
+      {
+        id: 'sftp-open-remote',
+        type: 'menu_item',
+        slot: 'menu.tools',
+        module: 'sftp',
+        title: 'Open Remote File...',
+        action: 'sftp:open_remote',
+        shortcut: 'Ctrl+Shift+O',
+        group: 'sftp-submenu',
+        order: 2
+      },
+      {
+        id: 'sftp-sep1',
+        type: 'menu_item',
+        slot: 'menu.tools',
+        module: 'sftp',
+        title: '---',
+        group: 'sftp-submenu',
+        order: 3
+      },
+      {
+        id: 'sftp-site-manager',
+        type: 'menu_item',
+        slot: 'menu.tools',
+        module: 'sftp',
+        title: 'Site Manager',
+        action: 'sftp:site_manager',
+        group: 'sftp-submenu',
+        order: 4
+      },
+      {
+        id: 'sftp-disconnect',
+        type: 'menu_item',
+        slot: 'menu.tools',
+        module: 'sftp',
+        title: 'Disconnect',
+        action: 'sftp:disconnect',
+        group: 'sftp-submenu',
+        order: 5
       }
     ],
     shortcuts: [

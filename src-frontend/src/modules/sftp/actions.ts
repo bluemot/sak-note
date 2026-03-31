@@ -69,6 +69,7 @@ export function registerSftpActions() {
 
   // Site manager
   actionRegistry.register('sftp', 'site_manager', async () => {
+    console.log('[SFTP] Site Manager action triggered');
     try {
       // Open site manager dialog via dialog store
       useDialogStore.getState().openDialog('sftpSiteManager');

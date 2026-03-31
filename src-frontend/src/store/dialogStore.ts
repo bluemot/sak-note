@@ -19,10 +19,13 @@ export const useDialogStore = create<DialogState>((set) => ({
   dialogProps: null,
   
   // Open a dialog with optional props
-  openDialog: (dialogName, props = null) => set({
-    activeDialog: dialogName,
-    dialogProps: props,
-  }),
+  openDialog: (dialogName, props = null) => {
+    console.log('[DialogStore] Opening dialog:', dialogName, props);
+    set({
+      activeDialog: dialogName,
+      dialogProps: props,
+    });
+  },
   
   // Close the current dialog
   closeDialog: () => set({

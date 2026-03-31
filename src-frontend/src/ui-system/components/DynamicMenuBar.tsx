@@ -43,14 +43,23 @@ const MenuItem: React.FC<MenuItemProps> = ({ item, onClose }) => {
 
   if (!isVisible) return null;
 
+  // Handle separator items
+  if (item.title === '---') {
+    return <div className="menu-separator" />;
+  }
+
   const handleClick = async () => {
+    console.log('[Menu] Clicked:', { action: item.action, hasSubmenu, type: item.type, title: item.title });
     if (item.action && !hasSubmenu) {
       try {
+        console.log('[Menu] Executing action:', item.action);
         await actionRegistry.execute(item.action);
       } catch (error) {
-        // Error handled in actionRegistry
+        console.error('[Menu] Action failed:', error);
       }
       onClose();
+    } else {
+      console.log('[Menu] Action not executed:', { hasAction: !!item.action, hasSubmenu });
     }
   };
 
@@ -72,8 +81,10 @@ const MenuItem: React.FC<MenuItemProps> = ({ item, onClose }) => {
   const submenuItems = hasSubmenu
     ? uiRegistry.getComponentsForSlot(item.slot as UISlot).filter(
         c => c.group === item.id && c.visible !== false
-      )
+      ).sort((a, b) => (a.order || 999) - (b.order || 999))
     : [];
+
+  console.log(`[MenuItem] Submenu ${item.id}: ${submenuItems.length} items`);
 
   return (
     <div
