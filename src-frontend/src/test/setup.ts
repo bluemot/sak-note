@@ -1,6 +1,12 @@
 import '@testing-library/jest-dom'
 import { vi } from 'vitest'
 
+// Extend globalThis for Tauri mock
+declare global {
+  // eslint-disable-next-line no-var
+  var __TAURI__: unknown
+}
+
 // Mock Tauri API
 globalThis.__TAURI__ = {}
 
