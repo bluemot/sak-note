@@ -22,6 +22,7 @@ export interface UIState {
   hasFileOpen: boolean;
   currentFilePath: string | null;
   currentFileName: string | null;
+  currentFileSize: number | null;
   canUndo: boolean;
   canRedo: boolean;
   hasChanges: boolean;
@@ -39,7 +40,7 @@ export interface UIState {
   notifications: Notification[];
   
   // Actions
-  setFileOpen: (path: string | null, name?: string | null) => void;
+  setFileOpen: (path: string | null, name?: string | null, size?: number | null) => void;
   setUndoRedo: (canUndo: boolean, canRedo: boolean) => void;
   setHasChanges: (hasChanges: boolean) => void;
   setSelection: (hasSelection: boolean, start?: number, end?: number) => void;
@@ -57,6 +58,7 @@ export const useUIStore = create<UIState>()(
       hasFileOpen: false,
       currentFilePath: null,
       currentFileName: null,
+      currentFileSize: null,
       canUndo: false,
       canRedo: false,
       hasChanges: false,
@@ -68,10 +70,11 @@ export const useUIStore = create<UIState>()(
       notifications: [],
       
       // Actions
-      setFileOpen: (path, name) => set({
+      setFileOpen: (path, name, size) => set({
         hasFileOpen: !!path,
         currentFilePath: path,
         currentFileName: name || (path ? path.split('/').pop() || null : null),
+        currentFileSize: size || null,
         hasChanges: false,
       }),
       

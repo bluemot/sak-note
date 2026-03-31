@@ -9,8 +9,8 @@ export function registerFileActions() {
     try {
       const selected = await open({ multiple: false });
       if (selected && typeof selected === 'string') {
-        const fileInfo = await invoke('open_file', { path: selected });
-        useUIStore.getState().setFileOpen(selected);
+        const fileInfo = await invoke<{ path: string; name: string; size: number }>('open_file', { path: selected });
+        useUIStore.getState().setFileOpen(fileInfo.path, fileInfo.name, fileInfo.size);
         return fileInfo;
       }
     } catch (error) {

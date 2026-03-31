@@ -89,10 +89,11 @@ const SidebarTabButton: React.FC<SidebarTabButtonProps> = ({ component, isActive
 };
 
 export interface DynamicSidebarProps {
-  currentFile?: { path: string; size: number; chunks: number; chunk_size: number } | null;
+  currentFilePath?: string | null;
+  currentFileName?: string | null;
 }
 
-export const DynamicSidebar: React.FC<DynamicSidebarProps> = ({ currentFile }) => {
+export const DynamicSidebar: React.FC<DynamicSidebarProps> = ({ currentFilePath, currentFileName }) => {
   // Read components from sidebar.tabs slot
   const components = uiRegistry.getComponentsForSlot('sidebar.tabs');
   const [activeTabId, setActiveTabId] = useState<string | null>(
@@ -149,25 +150,13 @@ export const DynamicSidebar: React.FC<DynamicSidebarProps> = ({ currentFile }) =
           {/* File info panel - always available as first tab */}
           {effectiveActiveId === 'info' && (
             <div className="info-panel">
-              {currentFile ? (
+              {currentFilePath ? (
                 <>
                   <div className="info-item">
                     <span className="label">File:</span>
-                    <span className="value" title={currentFile.path}>
-                      {currentFile.path.split('/').pop() || currentFile.path}
+                    <span className="value" title={currentFilePath}>
+                      {currentFileName || currentFilePath.split('/').pop() || currentFilePath.split('\\').pop() || currentFilePath}
                     </span>
-                  </div>
-                  <div className="info-item">
-                    <span className="label">Size:</span>
-                    <span className="value">{formatBytes(currentFile.size)}</span>
-                  </div>
-                  <div className="info-item">
-                    <span className="label">Chunks:</span>
-                    <span className="value">{currentFile.chunks}</span>
-                  </div>
-                  <div className="info-item">
-                    <span className="label">Chunk Size:</span>
-                    <span className="value">{formatBytes(currentFile.chunk_size)}</span>
                   </div>
                 </>
               ) : (
@@ -189,14 +178,5 @@ export const DynamicSidebar: React.FC<DynamicSidebarProps> = ({ currentFile }) =
     </div>
   );
 };
-
-// Helper function to format bytes
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return '0 B';
-  const k = 1024;
-  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-}
 
 export default DynamicSidebar;

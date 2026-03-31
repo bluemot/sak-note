@@ -26,6 +26,7 @@ import './App.css'
 
 // Dialog store
 import { useDialogStore } from './store/dialogStore'
+import { useUIStore } from './store/uiStore'
 
 // Import plugin service for initialization and logging
 import * as pluginService from './services/pluginService'
@@ -61,11 +62,13 @@ interface FileInfo {
 }
 
 function App() {
-  const [currentFile, setCurrentFile] = useState<FileInfo | null>(null)
   const [viewMode] = useState<'text' | 'hex'>('text')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [pluginsInitialized, setPluginsInitialized] = useState(false)
+
+  // Get file info from uiStore
+  const { currentFilePath, currentFileName, currentFileSize, hasFileOpen } = useUIStore()
   
   // Dialog state from store
   const { activeDialog, dialogProps, closeDialog } = useDialogStore()
@@ -177,6 +180,8 @@ function App() {
     }
   }, [log])
 
+
+
   const handleOpenFile = useCallback(async () => {
     log(`[App::handleOpenFile] === OPEN FILE WORKFLOW STARTED ===`);
 
@@ -198,7 +203,9 @@ function App() {
 
         const fileInfo = await invoke<FileInfo>('open_file', { path: selected });
 
-        setCurrentFile(fileInfo);
+        // Update uiStore - this will trigger the Editor to display
+        const fileName = selected.split('/').pop() || selected.split('\\').pop() || selected;
+        useUIStore.getState().setFileOpen(selected, fileName, fileInfo.size);
 
         // Broadcast file opened event to plugins
         if (pluginsInitialized) {
@@ -232,14 +239,14 @@ function App() {
   // Log state changes
   useEffect(() => {
     log('[App] State update:', {
-      hasFile: !!currentFile,
+      hasFile: hasFileOpen,
       viewMode,
       isLoading,
       hasError: !!error,
       pluginsInitialized,
       isSearchVisible
     })
-  }, [currentFile, viewMode, isLoading, error, pluginsInitialized, isSearchVisible, log])
+  }, [hasFileOpen, viewMode, isLoading, error, pluginsInitialized, isSearchVisible, log])
 
   // Welcome screen component
   const WelcomeScreen = () => (
@@ -304,7 +311,7 @@ function App() {
           maxSize={400}
           storageKey="sidebar-width"
         >
-          <DynamicSidebar currentFile={currentFile} />
+          <DynamicSidebar currentFilePath={currentFilePath} currentFileName={currentFileName} />
         </ResizableContainer>
 
         <div className="editor-container">
@@ -314,12 +321,12 @@ function App() {
             </div>
           )}
 
-          {!currentFile ? (
+          {!hasFileOpen ? (
             <WelcomeScreen />
           ) : viewMode === 'text' ? (
-            <Editor filePath={currentFile.path} fileSize={currentFile.size} />
+            <Editor filePath={currentFilePath || ''} fileSize={currentFileSize || 0} />
           ) : (
-            <HexViewer filePath={currentFile.path} fileSize={currentFile.size} />
+            <HexViewer filePath={currentFilePath || ''} fileSize={currentFileSize || 0} />
           )}
         </div>
       </div>
