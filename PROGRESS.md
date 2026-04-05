@@ -32,6 +32,7 @@ A modern cross-platform text editor with:
 ## Development Environment
 - **Rust**: rustc 1.94.1, cargo 1.94.1 (configured on Ubuntu build server)
 - **Node.js**: v20.x LTS
+- **Desktop**: Ubuntu with GUI support (can launch GUI apps and Chrome)
 - **Build Command**: `./build.sh` (full release build including Tauri bundles)
 
 ## Progress Log
