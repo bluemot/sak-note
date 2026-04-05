@@ -335,11 +335,13 @@ function FileEditor({ filePath, fileSize }: EditorProps) {
 
   // Load next chunk for large files
   const loadNextChunk = useCallback(async () => {
-    if (chunkRange.end >= fileSize) {
-      log(`[Editor::loadNextChunk] Already at end of file`)
+    if (chunkRange.end >= fileSize || !editorRef.current) {
+      log(`[Editor::loadNextChunk] Already at end of file or editor not ready`)
       return
     }
 
+    const editor = editorRef.current
+    const monaco = monacoRef.current
     const newStart = chunkRange.end
     const newEnd = Math.min(newStart + CHUNK_SIZE, fileSize)
     
@@ -354,9 +356,31 @@ function FileEditor({ filePath, fileSize }: EditorProps) {
         }
       })
       
-      setContent(prev => prev + text)
-      setChunkRange({ start: chunkRange.start, end: newEnd })
-      log(`[Editor::loadNextChunk] Loaded ${text.length} bytes, total: ${newEnd} / ${fileSize}`)
+      // Save current scroll position before updating content
+      const currentScrollTop = editor.getScrollTop()
+      const currentScrollLeft = editor.getScrollLeft()
+      
+      // Direct model manipulation - avoid React re-render
+      const model = editor.getModel()
+      if (model && monaco) {
+        const lineCount = model.getLineCount()
+        const lastLineLength = model.getLineMaxColumn(lineCount)
+        
+        // Append text at end using model edit
+        model.applyEdits([{
+          range: new monaco.Range(lineCount, lastLineLength, lineCount, lastLineLength),
+          text: text
+        }])
+        
+        // Restore scroll position
+        editor.setScrollPosition({ scrollTop: currentScrollTop, scrollLeft: currentScrollLeft })
+        
+        // Update content state for tracking (but don't trigger re-render)
+        setContent(prev => prev + text)
+        setChunkRange({ start: chunkRange.start, end: newEnd })
+        
+        log(`[Editor::loadNextChunk] Appended ${text.length} bytes via model edit, scroll preserved at ${currentScrollTop}`)
+      }
     } catch (err) {
       log(`[Editor::loadNextChunk] ERROR:`, err)
     }
