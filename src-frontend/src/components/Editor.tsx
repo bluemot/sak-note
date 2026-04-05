@@ -51,7 +51,6 @@ function FileEditor({ filePath, fileSize }: EditorProps) {
   const [isSaving, setIsSaving] = useState(false)
   const editorRef = useRef<any>(null)
   const monacoRef = useRef<any>(null)
-  const pendingEditsRef = useRef<EditOperation[]>([])
 
   // Load initial chunks
   useEffect(() => {
