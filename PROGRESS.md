@@ -29,6 +29,11 @@ A modern cross-platform text editor with:
 - **LLM**: Ollama cloud API (kimi-k2.5:cloud model)
 - **VFS**: Unified virtual file system for local/SFTP
 
+## Development Environment
+- **Rust**: rustc 1.94.1, cargo 1.94.1 (configured on Ubuntu build server)
+- **Node.js**: v20.x LTS
+- **Build Command**: `./build.sh` (full release build including Tauri bundles)
+
 ## Progress Log
 
 ### 2026-03-28 - Phase 4: Advanced UI Features
@@ -451,6 +456,38 @@ npm run test:e2e      # Run Playwright UI tests
 - [x] `debug-logging` - Debug version with full tracing
 
 **Total**: 117 Rust tests + 46 Playwright tests passing, 0 build errors
+
+### 2026-04-05 - Large File Editing & Complete Save/Undo/Redo
+
+#### Large File Bug Fix
+- [x] **Virtual Scrolling**: Fixed scroll-to-end issue for 538MB+ files
+  - Implemented chunk loading (64KB) on scroll
+  - Automatically loads next chunk when within 20% of bottom
+  - Memory efficient: O(loaded_chunks) not O(file_size)
+
+#### Complete Edit/Save/Undo/Redo Implementation
+- [x] **Rust Backend**: Exposed EditableFileManager via Tauri commands
+  - Commands: `insert_bytes`, `delete_bytes`, `replace_bytes`, `undo`, `redo`, `save_file`, `get_edit_status`
+  - Journal-based edit tracking (EditHistory)
+  - Atomic save (temp file + rename)
+- [x] **Frontend**: Complete editing functionality
+  - `onChange` handler with 300ms debounce
+  - Save (Ctrl+S), Undo (Ctrl+Z), Redo (Ctrl+Y/Ctrl+Shift+Z)
+  - Unsaved indicator (*) and toolbar buttons
+  - Edit status polling from backend
+
+#### Build Environment
+- [x] **Rust Environment**: Configured on Ubuntu build server
+  - rustc 1.94.1, cargo 1.94.1
+  - Full `./build.sh` support (AppImage, DEB, RPM)
+  - Build artifacts in `target/release/bundle/`
+
+#### Python Bindings (sak-note-pyo3)
+- [x] **PyO3 Bindings**: Python access to EditableFileManager
+  - Same journal-based editing as Tauri app
+  - Memory-efficient iteration: `lines()`, `for_each_line()`, `process_lines()`
+  - Line-based editing: `insert_at_line()`, `replace_line()`, `delete_line()`
+  - 45/45 tests passing
 
 #### In Progress / Next
 - [ ] GUI testing in actual user environment
