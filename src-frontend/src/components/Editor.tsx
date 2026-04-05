@@ -10,9 +10,34 @@ interface EditorProps {
 
 const CHUNK_SIZE = 64 * 1024 // 64KB chunks
 
+// Edit operation types for backend communication
+interface EditOperation {
+  type: 'insert' | 'delete' | 'replace'
+  offset: number
+  data?: string
+  length?: number
+}
+
 // Helper for formatted logging
 const log = (msg: string, ...args: any[]) => {
   console.log(`[${new Date().toISOString()}] ${msg}`, ...args)
+}
+
+// Debounce utility for edit operations
+function useDebounce<T extends (...args: any[]) => void>(
+  callback: T,
+  delay: number
+) {
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  return useCallback((...args: Parameters<T>) => {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current)
+    }
+    timeoutRef.current = setTimeout(() => {
+      callback(...args)
+    }, delay)
+  }, [callback, delay])
 }
 
 function FileEditor({ filePath, fileSize }: EditorProps) {
@@ -20,7 +45,13 @@ function FileEditor({ filePath, fileSize }: EditorProps) {
   const [isLoading, setIsLoading] = useState(true)
   const [chunkRange, setChunkRange] = useState({ start: 0, end: Math.min(CHUNK_SIZE * 2, fileSize) })
   const [error, setError] = useState<string | null>(null)
+  const [isModified, setIsModified] = useState(false)
+  const [canUndo, setCanUndo] = useState(false)
+  const [canRedo, setCanRedo] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
   const editorRef = useRef<any>(null)
+  const monacoRef = useRef<any>(null)
+  const pendingEditsRef = useRef<EditOperation[]>([])
 
   // Load initial chunks
   useEffect(() => {
@@ -90,11 +121,128 @@ function FileEditor({ filePath, fileSize }: EditorProps) {
     }
   }, [filePath, fileSize, chunkRange])
 
-  const handleEditorDidMount = useCallback((editor: any) => {
+  // Check edit status from backend
+  const checkEditStatus = useCallback(async () => {
+    try {
+      const status = await invoke<{
+        has_changes: boolean
+        can_undo: boolean
+        can_redo: boolean
+        effective_size: number
+      }>('get_edit_status', { path: filePath })
+      setIsModified(status.has_changes)
+      setCanUndo(status.can_undo)
+      setCanRedo(status.can_redo)
+      log(`[Editor::checkEditStatus] Status: has_changes=${status.has_changes}, can_undo=${status.can_undo}, can_redo=${status.can_redo}`)
+    } catch (err) {
+      log(`[Editor::checkEditStatus] ERROR:`, err)
+    }
+  }, [filePath])
+
+  // Reload content after undo/redo
+  const reloadContent = useCallback(async () => {
+    log(`[Editor::reloadContent] Reloading content after undo/redo`)
+    try {
+      const text = await invoke<string>('get_text', {
+        req: {
+          path: filePath,
+          start: chunkRange.start,
+          end: chunkRange.end,
+        },
+      })
+      setContent(text)
+      log(`[Editor::reloadContent] Content reloaded: ${text.length} bytes`)
+    } catch (err) {
+      log(`[Editor::reloadContent] ERROR:`, err)
+    }
+  }, [filePath, chunkRange.start, chunkRange.end])
+
+  // Send edit to backend
+  const sendEditToBackend = useCallback(async (edit: EditOperation) => {
+    try {
+      log(`[Editor::sendEditToBackend] Sending ${edit.type} edit: offset=${edit.offset}, data_length=${edit.data?.length || 0}`)
+      
+      switch (edit.type) {
+        case 'insert':
+          await invoke('insert_bytes', {
+            req: {
+              path: filePath,
+              offset: edit.offset,
+              data: Array.from(new TextEncoder().encode(edit.data || '')),
+            },
+          })
+          break
+        case 'delete':
+          await invoke('delete_bytes', {
+            req: {
+              path: filePath,
+              offset: edit.offset,
+              length: edit.length || 0,
+            },
+          })
+          break
+        case 'replace':
+          await invoke('replace_bytes', {
+            req: {
+              path: filePath,
+              offset: edit.offset,
+              length: edit.length || 0,
+              data: Array.from(new TextEncoder().encode(edit.data || '')),
+            },
+          })
+          break
+      }
+      
+      // Update status after edit
+      await checkEditStatus()
+      log(`[Editor::sendEditToBackend] Edit sent successfully`)
+    } catch (err) {
+      log(`[Editor::sendEditToBackend] ERROR:`, err)
+      throw err
+    }
+  }, [filePath, checkEditStatus])
+
+  // Debounced edit sender
+  const debouncedSendEdit = useDebounce(sendEditToBackend, 300)
+
+  // Handle content changes from Monaco
+  const handleEditorChange = useCallback((value: string | undefined) => {
+    if (!value || !editorRef.current) return
+
+    const model = editorRef.current.getModel()
+    if (!model) return
+
+    // Get the current full content
+    const newContent = value
+    const oldContent = content
+
+    // Simple diff: if content changed, calculate what changed
+    if (newContent !== oldContent) {
+      log(`[Editor::handleEditorChange] Content changed`)
+      
+      // For simplicity, we'll track the entire content change
+      // In a production app, you'd want more sophisticated diffing
+      const edit: EditOperation = {
+        type: 'replace',
+        offset: chunkRange.start,
+        length: oldContent.length,
+        data: newContent,
+      }
+      
+      // Update local state immediately for responsiveness
+      setContent(newContent)
+      
+      // Send to backend (debounced)
+      debouncedSendEdit(edit)
+    }
+  }, [content, chunkRange.start, debouncedSendEdit])
+
+  const handleEditorDidMount = useCallback((editor: any, monaco: any) => {
     log(`[Editor::handleEditorDidMount] Monaco editor mounted`)
     
     editorRef.current = editor
-    log(`[Editor::handleEditorDidMount] editorRef set`)
+    monacoRef.current = monaco
+    log(`[Editor::handleEditorDidMount] editorRef and monacoRef set`)
     
     // Configure editor for large files
     log(`[Editor::handleEditorDidMount] Configuring editor options...`)
@@ -110,7 +258,7 @@ function FileEditor({ filePath, fileSize }: EditorProps) {
     log(`[Editor::handleEditorDidMount] Editor options updated`)
 
     // Virtual scrolling for large files
-    editor.onDidScrollChange((e) => {
+    editor.onDidScrollChange((e: any) => {
       // Check if scrolled near bottom to load more content
       const scrollTop = e.scrollTop;
       const scrollHeight = e.scrollHeight;
@@ -123,14 +271,68 @@ function FileEditor({ filePath, fileSize }: EditorProps) {
         loadNextChunk();
       }
     })
+
+    // Setup undo/redo keyboard handlers
+    // Keyboard commands are handled by global event listeners below
     
     log(`[Editor::handleEditorDidMount] Content displayed in Monaco editor`)
-  }, [])
+    
+    // Check initial edit status
+    checkEditStatus()
+  }, [chunkRange.end, fileSize, checkEditStatus])
 
-  const handleSave = useCallback(() => {
+  // Handle undo
+  const handleUndo = useCallback(async () => {
+    log(`[Editor::handleUndo] Undo triggered`)
+    try {
+      const success = await invoke<boolean>('undo', { path: filePath })
+      if (success) {
+        log(`[Editor::handleUndo] Undo successful`)
+        // Reload content to reflect changes
+        await reloadContent()
+        await checkEditStatus()
+      } else {
+        log(`[Editor::handleUndo] Nothing to undo`)
+      }
+    } catch (err) {
+      log(`[Editor::handleUndo] ERROR:`, err)
+    }
+  }, [filePath, reloadContent, checkEditStatus])
+
+  // Handle redo
+  const handleRedo = useCallback(async () => {
+    log(`[Editor::handleRedo] Redo triggered`)
+    try {
+      const success = await invoke<boolean>('redo', { path: filePath })
+      if (success) {
+        log(`[Editor::handleRedo] Redo successful`)
+        // Reload content to reflect changes
+        await reloadContent()
+        await checkEditStatus()
+      } else {
+        log(`[Editor::handleRedo] Nothing to redo`)
+      }
+    } catch (err) {
+      log(`[Editor::handleRedo] ERROR:`, err)
+    }
+  }, [filePath, reloadContent, checkEditStatus])
+
+  const handleSave = useCallback(async () => {
     log(`[Editor::handleSave] Save triggered`)
-    // TODO: Implement save functionality
-  }, [])
+    setIsSaving(true)
+    
+    try {
+      await invoke('save_file', { path: filePath })
+      log(`[Editor::handleSave] File saved successfully`)
+      setIsModified(false)
+      await checkEditStatus()
+    } catch (err) {
+      log(`[Editor::handleSave] ERROR:`, err)
+      setError(err instanceof Error ? err.message : 'Save failed')
+    } finally {
+      setIsSaving(false)
+    }
+  }, [filePath, checkEditStatus])
 
   // Load next chunk for large files
   const loadNextChunk = useCallback(async () => {
@@ -161,18 +363,31 @@ function FileEditor({ filePath, fileSize }: EditorProps) {
     }
   }, [filePath, fileSize, chunkRange])
 
-  // Keyboard shortcut for save
+  // Keyboard shortcuts for save, undo, redo
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Save: Ctrl/Cmd + S
       if ((e.metaKey || e.ctrlKey) && e.key === 's') {
         log(`[Editor::handleKeyDown] Save keyboard shortcut triggered`)
         e.preventDefault()
         handleSave()
       }
+      // Undo: Ctrl/Cmd + Z
+      else if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !e.shiftKey) {
+        log(`[Editor::handleKeyDown] Undo keyboard shortcut triggered`)
+        e.preventDefault()
+        handleUndo()
+      }
+      // Redo: Ctrl/Cmd + Y or Ctrl/Cmd + Shift + Z
+      else if ((e.metaKey || e.ctrlKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
+        log(`[Editor::handleKeyDown] Redo keyboard shortcut triggered`)
+        e.preventDefault()
+        handleRedo()
+      }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [handleSave])
+  }, [handleSave, handleUndo, handleRedo])
 
   // Detect language from file extension
   const getLanguage = (path: string): string => {
@@ -235,18 +450,49 @@ function FileEditor({ filePath, fileSize }: EditorProps) {
 
   return (
     <div className="editor-wrapper">
-      <div className="editor-info">
-        <span>{filePath}</span>
-        <span className="editor-stats">
-          {chunkRange.start.toLocaleString()} - {chunkRange.end.toLocaleString()} / {fileSize.toLocaleString()} bytes
-        </span>
+      <div className="editor-toolbar">
+        <div className="editor-info">
+          <span className={isModified ? 'modified' : ''}>
+            {filePath}{isModified && ' *'}
+          </span>
+          <span className="editor-stats">
+            {chunkRange.start.toLocaleString()} - {chunkRange.end.toLocaleString()} / {fileSize.toLocaleString()} bytes
+          </span>
+        </div>
+        <div className="editor-actions">
+          <button 
+            onClick={handleUndo} 
+            disabled={!canUndo || isSaving}
+            title="Undo (Ctrl+Z)"
+            className="editor-btn"
+          >
+            Undo
+          </button>
+          <button 
+            onClick={handleRedo} 
+            disabled={!canRedo || isSaving}
+            title="Redo (Ctrl+Y)"
+            className="editor-btn"
+          >
+            Redo
+          </button>
+          <button 
+            onClick={handleSave} 
+            disabled={isSaving || !isModified}
+            title="Save (Ctrl+S)"
+            className={`editor-btn save ${isModified ? 'modified' : ''}`}
+          >
+            {isSaving ? 'Saving...' : 'Save'}
+          </button>
+        </div>
       </div>
       <Editor
-        height="calc(100% - 32px)"
+        height="calc(100% - 48px)"
         language={detectedLang}
         value={content}
         theme="vs-dark"
         onMount={handleEditorDidMount}
+        onChange={handleEditorChange}
         options={{
           selectOnLineNumbers: true,
           automaticLayout: true,

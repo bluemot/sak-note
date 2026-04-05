@@ -5,7 +5,7 @@
   overflow: hidden;
 }
 
-.editor-info {
+.editor-toolbar {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -16,8 +16,64 @@
   color: #969696;
 }
 
+.editor-info {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+
+.editor-info .modified {
+  color: #ff9d00;
+  font-weight: 500;
+}
+
 .editor-stats {
   font-family: monospace;
+}
+
+.editor-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.editor-btn {
+  padding: 4px 12px;
+  font-size: 12px;
+  background-color: #3d3d3d;
+  color: #e0e0e0;
+  border: 1px solid #4d4d4d;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.editor-btn:hover:not(:disabled) {
+  background-color: #4d4d4d;
+  border-color: #5d5d5d;
+}
+
+.editor-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.editor-btn.save {
+  background-color: #0e639c;
+  border-color: #1177bb;
+}
+
+.editor-btn.save:hover:not(:disabled) {
+  background-color: #1177bb;
+}
+
+.editor-btn.save.modified {
+  background-color: #c75450;
+  border-color: #d75650;
+}
+
+.editor-btn.save.modified:hover:not(:disabled) {
+  background-color: #d75650;
 }
 
 .editor-loading {
@@ -27,4 +83,14 @@
   justify-content: center;
   color: #969696;
   font-size: 14px;
+}
+
+.editor-error {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #c75450;
+  font-size: 14px;
+  padding: 20px;
 }

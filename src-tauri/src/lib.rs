@@ -139,6 +139,20 @@ struct SaveAsRequest {
     target_path: String,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+enum EditRequest {
+    Insert { offset: usize, data: Vec<u8> },
+    Delete { offset: usize, length: usize },
+    Replace { offset: usize, length: usize, data: Vec<u8> },
+}
+
+#[derive(Debug, Deserialize)]
+struct ApplyEditRequest {
+    path: String,
+    edit: EditRequest,
+}
+
 // ============== Mark Request/Response Types ==============
 
 #[derive(Debug, Deserialize)]
@@ -396,6 +410,22 @@ async fn replace_bytes(req: ReplaceRequest) -> Result<(), String> {
             length: req.length, 
             data: req.data 
         });
+        Ok(())
+    } else {
+        Err("File not open in editable mode".to_string())
+    }
+}
+
+#[tauri::command]
+async fn apply_edit(req: ApplyEditRequest) -> Result<(), String> {
+    if let Some(manager) = FileEngine::get_editable(&req.path) {
+        let mut guard = manager.write().map_err(|e| format!("Lock error: {}", e))?;
+        let op = match req.edit {
+            EditRequest::Insert { offset, data } => EditOp::Insert { offset, data },
+            EditRequest::Delete { offset, length } => EditOp::Delete { offset, length },
+            EditRequest::Replace { offset, length, data } => EditOp::Replace { offset, length, data },
+        };
+        guard.apply_edit(op);
         Ok(())
     } else {
         Err("File not open in editable mode".to_string())
@@ -678,6 +708,7 @@ pub fn run() {
             insert_bytes,
             delete_bytes,
             replace_bytes,
+            apply_edit,
             // Undo/redo
             undo,
             redo,
