@@ -18,7 +18,7 @@ const log = (msg: string, ...args: any[]) => {
 function FileEditor({ filePath, fileSize }: EditorProps) {
   const [content, setContent] = useState('')
   const [isLoading, setIsLoading] = useState(true)
-  const [chunkRange, _setChunkRange] = useState({ start: 0, end: Math.min(CHUNK_SIZE * 2, fileSize) })
+  const [chunkRange, setChunkRange] = useState({ start: 0, end: Math.min(CHUNK_SIZE * 2, fileSize) })
   const [error, setError] = useState<string | null>(null)
   const editorRef = useRef<any>(null)
 
@@ -110,9 +110,18 @@ function FileEditor({ filePath, fileSize }: EditorProps) {
     log(`[Editor::handleEditorDidMount] Editor options updated`)
 
     // Virtual scrolling for large files
-    editor.onDidScrollChange(() => {
-      // TODO: Implement virtual scrolling to load chunks on demand
-      // This is a placeholder for the actual implementation
+    editor.onDidScrollChange((e) => {
+      // Check if scrolled near bottom to load more content
+      const scrollTop = e.scrollTop;
+      const scrollHeight = e.scrollHeight;
+      const clientHeight = e.height || editor.getLayoutInfo().height;
+      
+      // Load next chunk when within 20% of bottom
+      const threshold = scrollHeight * 0.2;
+      if (scrollTop + clientHeight >= scrollHeight - threshold && chunkRange.end < fileSize) {
+        log(`[Editor::onDidScrollChange] Near bottom (scrollTop=${scrollTop}, scrollHeight=${scrollHeight}), loading next chunk...`);
+        loadNextChunk();
+      }
     })
     
     log(`[Editor::handleEditorDidMount] Content displayed in Monaco editor`)
@@ -122,6 +131,35 @@ function FileEditor({ filePath, fileSize }: EditorProps) {
     log(`[Editor::handleSave] Save triggered`)
     // TODO: Implement save functionality
   }, [])
+
+  // Load next chunk for large files
+  const loadNextChunk = useCallback(async () => {
+    if (chunkRange.end >= fileSize) {
+      log(`[Editor::loadNextChunk] Already at end of file`)
+      return
+    }
+
+    const newStart = chunkRange.end
+    const newEnd = Math.min(newStart + CHUNK_SIZE, fileSize)
+    
+    log(`[Editor::loadNextChunk] Loading chunk: ${newStart} - ${newEnd}`)
+    
+    try {
+      const text = await invoke<string>('get_text', {
+        req: {
+          path: filePath,
+          start: newStart,
+          end: newEnd
+        }
+      })
+      
+      setContent(prev => prev + text)
+      setChunkRange({ start: chunkRange.start, end: newEnd })
+      log(`[Editor::loadNextChunk] Loaded ${text.length} bytes, total: ${newEnd} / ${fileSize}`)
+    } catch (err) {
+      log(`[Editor::loadNextChunk] ERROR:`, err)
+    }
+  }, [filePath, fileSize, chunkRange])
 
   // Keyboard shortcut for save
   useEffect(() => {
