@@ -3,6 +3,7 @@ import { open } from '@tauri-apps/plugin-dialog'
 import { invoke } from '@tauri-apps/api/core'
 import Editor from './components/Editor'
 import HexViewer from './components/HexViewer'
+import MarkdownEditor from './components/MarkdownEditor'
 
 // Import dynamic UI components from ui-system
 import { DynamicToolbar } from './ui-system/components/DynamicToolbar'
@@ -54,6 +55,13 @@ import {
 // Phase 4: Plugin Loader
 import { loadAllPlugins, triggerHook } from './ui-system/pluginLoader'
 
+// Helper function to check if file is markdown
+const isMarkdownFile = (filePath: string | null): boolean => {
+  if (!filePath) return false
+  const ext = filePath.toLowerCase().split('.').pop()
+  return ext === 'md' || ext === 'markdown' || ext === 'mdx'
+}
+
 interface FileInfo {
   path: string
   size: number
@@ -66,6 +74,9 @@ function App() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [pluginsInitialized, setPluginsInitialized] = useState(false)
+  
+  // Markdown editor state
+  const [markdownContent, setMarkdownContent] = useState('')
 
   // Get file info from uiStore
   const { currentFilePath, currentFileName, currentFileSize, hasFileOpen } = useUIStore()
@@ -207,6 +218,15 @@ function App() {
         const fileName = selected.split('/').pop() || selected.split('\\').pop() || selected;
         useUIStore.getState().setFileOpen(selected, fileName, fileInfo.size);
 
+        // If markdown file, load content
+        if (isMarkdownFile(selected)) {
+          log(`[App::handleOpenFile] Markdown file detected, loading content...`);
+          const content = await invoke<string>('get_text', {
+            req: { path: selected, start: 0, end: fileInfo.size }
+          });
+          setMarkdownContent(content);
+        }
+
         // Broadcast file opened event to plugins
         if (pluginsInitialized) {
           await pluginService.broadcastEvent('FileOpened', { path: selected });
@@ -324,7 +344,15 @@ function App() {
           {!hasFileOpen ? (
             <WelcomeScreen />
           ) : viewMode === 'text' ? (
-            <Editor filePath={currentFilePath || ''} fileSize={currentFileSize || 0} />
+            isMarkdownFile(currentFilePath) ? (
+              <MarkdownEditor 
+                filePath={currentFilePath || ''} 
+                initialContent={markdownContent}
+                onChange={setMarkdownContent}
+              />
+            ) : (
+              <Editor filePath={currentFilePath || ''} fileSize={currentFileSize || 0} />
+            )
           ) : (
             <HexViewer filePath={currentFilePath || ''} fileSize={currentFileSize || 0} />
           )}

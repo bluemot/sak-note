@@ -16,6 +16,7 @@
     "test:e2e:update-snapshots": "playwright test --update-snapshots"
   },
   "dependencies": {
+    "@mdxeditor/editor": "^3.53.1",
     "@monaco-editor/react": "^4.6.0",
     "@tauri-apps/api": "^2.0.0",
     "@tauri-apps/plugin-dialog": "^2.6.0",
