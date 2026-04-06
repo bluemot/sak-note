@@ -88,6 +88,11 @@ cd ../src-tauri
 # Source cargo env
 source "$HOME/.cargo/env" 2> /dev/null || true
 
+# Limit parallel jobs to avoid "Too many open files" error
+# See: https://github.com/rust-lang/cargo/issues/10455
+export CARGO_BUILD_JOBS=4
+echo "Using CARGO_BUILD_JOBS=$CARGO_BUILD_JOBS to limit file descriptors"
+
 cargo tauri build
 if [ $? -ne 0 ]; then
     echo -e "${RED}✗${NC} Tauri build failed"
