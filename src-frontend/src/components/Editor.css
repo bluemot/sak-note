@@ -76,6 +76,11 @@
   background-color: #d75650;
 }
 
+.editor-container {
+  flex: 1;
+  overflow: hidden;
+}
+
 .editor-loading {
   flex: 1;
   display: flex;
@@ -95,13 +100,37 @@
   padding: 20px;
 }
 
-/* Mark highlight decorations */
-.mark-highlight-red { background-color: rgba(255, 107, 107, 0.3); }
-.mark-highlight-orange { background-color: rgba(255, 159, 67, 0.3); }
-.mark-highlight-yellow { background-color: rgba(254, 202, 87, 0.3); }
-.mark-highlight-green { background-color: rgba(93, 216, 92, 0.3); }
-.mark-highlight-cyan { background-color: rgba(34, 211, 238, 0.3); }
-.mark-highlight-blue { background-color: rgba(84, 160, 255, 0.3); }
-.mark-highlight-purple { background-color: rgba(165, 94, 233, 0.3); }
-.mark-highlight-pink { background-color: rgba(255, 107, 157, 0.3); }
-.mark-highlight-gray { background-color: rgba(164, 164, 164, 0.3); }
+/* CodeMirror mark highlight decorations */
+.cm-mark-red { background-color: rgba(255, 107, 107, 0.3); }
+.cm-mark-orange { background-color: rgba(255, 159, 67, 0.3); }
+.cm-mark-yellow { background-color: rgba(254, 202, 87, 0.3); }
+.cm-mark-green { background-color: rgba(93, 216, 92, 0.3); }
+.cm-mark-cyan { background-color: rgba(34, 211, 238, 0.3); }
+.cm-mark-blue { background-color: rgba(84, 160, 255, 0.3); }
+.cm-mark-purple { background-color: rgba(165, 94, 233, 0.3); }
+.cm-mark-pink { background-color: rgba(255, 107, 157, 0.3); }
+.cm-mark-gray { background-color: rgba(164, 164, 164, 0.3); }
+
+/* Context menu for marks */
+.cm-context-menu {
+  position: fixed;
+  z-index: 10000;
+  background-color: #2d2d2d;
+  border: 1px solid #4d4d4d;
+  border-radius: 6px;
+  padding: 4px 0;
+  min-width: 160px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+}
+
+.cm-context-menu-item {
+  padding: 6px 16px;
+  cursor: pointer;
+  font-size: 13px;
+  color: #e0e0e0;
+  transition: background-color 0.15s;
+}
+
+.cm-context-menu-item:hover {
+  background-color: #3d3d3d;
+}
