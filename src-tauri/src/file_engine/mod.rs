@@ -76,7 +76,12 @@ impl FileEngine {
         
         Ok(manager)
     }
-    
+
+    /// Get read-only file manager (ChunkManager)
+    pub fn get_file(path: &str) -> Option<Arc<ChunkManager>> {
+        FILE_CACHE.get(path).map(|m| m.clone())
+    }
+
     /// Get editable file manager
     pub fn get_editable(path: &str) -> Option<Arc<RwLock<EditableFileManager>>> {
         log::trace!("[FileEngine::get_editable] Looking up editable file: {}", path);
@@ -116,12 +121,14 @@ impl FileEngine {
                 let has_changes = guard.has_changes();
                 log::debug!("[FileEngine::get_file_info] File info: size={}, chunks={}, has_changes={}", 
                     size, chunks, has_changes);
+                let line_count = guard.line_count();
                 return Some(FileInfo {
                     path: path.to_string(),
                     size,
                     chunks,
                     editable: true,
                     has_changes,
+                    line_count,
                 });
             } else {
                 log::warn!("[FileEngine::get_file_info] Failed to acquire read lock");
@@ -133,14 +140,16 @@ impl FileEngine {
         FILE_CACHE.get(path).map(|m| {
             let size = m.file_size();
             let chunks = m.chunk_count();
-            log::debug!("[FileEngine::get_file_info] Found in FILE_CACHE: size={}, chunks={}", 
-                size, chunks);
+            let line_count = m.line_count();
+            log::debug!("[FileEngine::get_file_info] Found in FILE_CACHE: size={}, chunks={}, lines={}", 
+                size, chunks, line_count);
             FileInfo {
                 path: path.to_string(),
                 size,
                 chunks,
                 editable: false,
                 has_changes: false,
+                line_count,
             }
         })
     }
@@ -165,4 +174,5 @@ pub struct FileInfo {
     pub chunks: usize,
     pub editable: bool,
     pub has_changes: bool,
+    pub line_count: usize,
 }

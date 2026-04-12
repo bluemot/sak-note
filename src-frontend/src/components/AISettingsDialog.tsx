@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { useSettingsStore, AVAILABLE_MODELS } from '../store/settingsStore'
 import './AISettingsDialog.css'
 
 interface AISettings {
@@ -14,26 +15,13 @@ interface AISettingsDialogProps {
   onSave?: (settings: AISettings) => void
 }
 
-const AVAILABLE_MODELS = [
-  { value: 'kimi-k2.5:cloud', label: 'Kimi K2.5 (Cloud)' },
-  { value: 'kimi-k2.5', label: 'Kimi K2.5 (Local)' },
-  { value: 'llama3.2:latest', label: 'Llama 3.2' },
-  { value: 'qwen2.5:latest', label: 'Qwen 2.5' },
-  { value: 'deepseek-coder:latest', label: 'DeepSeek Coder' },
-  { value: 'codellama:latest', label: 'Code Llama' },
-  { value: 'mistral:latest', label: 'Mistral' },
-  { value: 'gemma2:latest', label: 'Gemma 2' },
-]
-
-const DEFAULT_SETTINGS: AISettings = {
-  apiUrl: 'http://localhost:11434',
-  model: 'kimi-k2.5:cloud',
-  apiKey: '',
-  temperature: 0.7,
-}
-
 export function AISettingsDialog({ isOpen, onClose, onSave }: AISettingsDialogProps) {
-  const [settings, setSettings] = useState<AISettings>(DEFAULT_SETTINGS)
+  const aiSettings = useSettingsStore((s) => s.aiSettings)
+  const updateAISettings = useSettingsStore((s) => s.updateAISettings)
+  const applyAISettings = useSettingsStore((s) => s.applyAISettings)
+  const isApplying = useSettingsStore((s) => s.isApplying)
+
+  const [localSettings, setLocalSettings] = useState<AISettings>(aiSettings)
   const [isTesting, setIsTesting] = useState(false)
   const [testStatus, setTestStatus] = useState<'idle' | 'success' | 'error'>('idle')
   const [customModel, setCustomModel] = useState('')
@@ -41,18 +29,10 @@ export function AISettingsDialog({ isOpen, onClose, onSave }: AISettingsDialogPr
   
   const apiUrlInputRef = useRef<HTMLInputElement>(null)
 
-  // Load settings from localStorage on mount
+  // Sync local state from store when dialog opens
   useEffect(() => {
     if (isOpen) {
-      try {
-        const stored = localStorage.getItem('sak-ai-settings')
-        if (stored) {
-          const parsed = JSON.parse(stored)
-          setSettings({ ...DEFAULT_SETTINGS, ...parsed })
-        }
-      } catch (err) {
-        console.error('Failed to load AI settings:', err)
-      }
+      setLocalSettings(aiSettings)
       setTestStatus('idle')
       setShowCustomModel(false)
     }
@@ -82,20 +62,17 @@ export function AISettingsDialog({ isOpen, onClose, onSave }: AISettingsDialogPr
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [isOpen, settings])
+  }, [isOpen, localSettings])
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const finalSettings = showCustomModel && customModel
-      ? { ...settings, model: customModel }
-      : settings
-      
-    try {
-      localStorage.setItem('sak-ai-settings', JSON.stringify(finalSettings))
-      onSave?.(finalSettings)
-      onClose()
-    } catch (err) {
-      console.error('Failed to save AI settings:', err)
-    }
+      ? { ...localSettings, model: customModel }
+      : localSettings
+
+    updateAISettings(finalSettings)
+    await applyAISettings()
+    onSave?.(finalSettings)
+    onClose()
   }
 
   const handleTestConnection = async () => {
@@ -103,7 +80,7 @@ export function AISettingsDialog({ isOpen, onClose, onSave }: AISettingsDialogPr
     setTestStatus('idle')
     
     try {
-      const response = await fetch(`${settings.apiUrl}/api/tags`)
+      const response = await fetch(`${localSettings.apiUrl}/api/tags`)
       if (response.ok) {
         setTestStatus('success')
       } else {
@@ -122,12 +99,12 @@ export function AISettingsDialog({ isOpen, onClose, onSave }: AISettingsDialogPr
       setShowCustomModel(true)
     } else {
       setShowCustomModel(false)
-      setSettings({ ...settings, model: value })
+      setLocalSettings({ ...localSettings, model: value })
     }
   }
 
   const updateSetting = <K extends keyof AISettings>(key: K, value: AISettings[K]) => {
-    setSettings(prev => ({ ...prev, [key]: value }))
+    setLocalSettings(prev => ({ ...prev, [key]: value }))
     setTestStatus('idle')
   }
 
@@ -148,7 +125,7 @@ export function AISettingsDialog({ isOpen, onClose, onSave }: AISettingsDialogPr
               <input
                 ref={apiUrlInputRef}
                 type="text"
-                value={settings.apiUrl}
+                value={localSettings.apiUrl}
                 onChange={e => updateSetting('apiUrl', e.target.value)}
                 placeholder="http://localhost:11434"
               />
@@ -171,7 +148,7 @@ export function AISettingsDialog({ isOpen, onClose, onSave }: AISettingsDialogPr
           <div className="form-row">
             <label>Model</label>
             <select
-              value={showCustomModel ? 'custom' : settings.model}
+              value={showCustomModel ? 'custom' : localSettings.model}
               onChange={e => handleModelChange(e.target.value)}
             >
               {AVAILABLE_MODELS.map(model => (
@@ -196,7 +173,7 @@ export function AISettingsDialog({ isOpen, onClose, onSave }: AISettingsDialogPr
             <label>API Key (Optional)</label>
             <input
               type="password"
-              value={settings.apiKey}
+              value={localSettings.apiKey}
               onChange={e => updateSetting('apiKey', e.target.value)}
               placeholder="Enter API key if required"
             />
@@ -204,13 +181,13 @@ export function AISettingsDialog({ isOpen, onClose, onSave }: AISettingsDialogPr
           </div>
 
           <div className="form-row">
-            <label>Temperature: {settings.temperature}</label>
+            <label>Temperature: {localSettings.temperature}</label>
             <input
               type="range"
               min="0"
               max="2"
               step="0.1"
-              value={settings.temperature}
+              value={localSettings.temperature}
               onChange={e => updateSetting('temperature', parseFloat(e.target.value))}
             />
             <div className="range-labels">
@@ -233,9 +210,9 @@ export function AISettingsDialog({ isOpen, onClose, onSave }: AISettingsDialogPr
           <button 
             className="btn-primary" 
             onClick={handleSave}
-            disabled={!settings.apiUrl || (!settings.model && !customModel)}
+            disabled={!localSettings.apiUrl || (!localSettings.model && !customModel) || isApplying}
           >
-            Save Settings
+            {isApplying ? 'Applying...' : 'Save Settings'}
           </button>
         </div>
       </div>

@@ -94,3 +94,14 @@
   font-size: 14px;
   padding: 20px;
 }
+
+/* Mark highlight decorations */
+.mark-highlight-red { background-color: rgba(255, 107, 107, 0.3); }
+.mark-highlight-orange { background-color: rgba(255, 159, 67, 0.3); }
+.mark-highlight-yellow { background-color: rgba(254, 202, 87, 0.3); }
+.mark-highlight-green { background-color: rgba(93, 216, 92, 0.3); }
+.mark-highlight-cyan { background-color: rgba(34, 211, 238, 0.3); }
+.mark-highlight-blue { background-color: rgba(84, 160, 255, 0.3); }
+.mark-highlight-purple { background-color: rgba(165, 94, 233, 0.3); }
+.mark-highlight-pink { background-color: rgba(255, 107, 157, 0.3); }
+.mark-highlight-gray { background-color: rgba(164, 164, 164, 0.3); }

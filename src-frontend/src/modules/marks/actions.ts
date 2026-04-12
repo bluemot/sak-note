@@ -4,11 +4,28 @@ import { invoke } from '@tauri-apps/api/core';
 import { open, save } from '@tauri-apps/plugin-dialog';
 import { useDialogStore } from '../../store/dialogStore';
 
+// Mark color type
+type MarkColor = 'red' | 'orange' | 'yellow' | 'green' | 'cyan' | 'blue' | 'purple' | 'pink' | 'gray'
+
+const MARK_COLORS: MarkColor[] = ['red', 'orange', 'yellow', 'green', 'cyan', 'blue', 'purple', 'pink', 'gray']
+
+// Color index for cycling
+let colorIndex = 0
+
+function getNextColor(): MarkColor {
+  const color = MARK_COLORS[colorIndex % MARK_COLORS.length]
+  colorIndex++
+  return color
+}
+
 export function registerMarksActions() {
   // Create mark at current position
   actionRegistry.register('marks', 'create', async (params?: {
     position?: number;
     label?: string;
+    color?: string;
+    start?: number;
+    end?: number;
   }) => {
     try {
       const { currentFilePath } = useUIStore.getState();
@@ -23,10 +40,15 @@ export function registerMarksActions() {
             placeholder: 'Enter mark name...',
             onConfirm: async (value: string) => {
               try {
-                const result = await invoke('marks_create', {
-                  file_path: currentFilePath,
-                  position: params?.position,
-                  label: value
+                const result = await invoke('create_mark', {
+                  req: {
+                    path: currentFilePath,
+                    start: params?.start ?? params?.position ?? 0,
+                    end: params?.end ?? (params?.position ?? 0) + 1,
+                    color: params?.color ?? 'yellow',
+                    label: value,
+                    note: null,
+                  }
                 });
 
                 useUIStore.getState().addNotification({
@@ -44,10 +66,15 @@ export function registerMarksActions() {
         });
       }
 
-      const result = await invoke('marks_create', {
-        file_path: currentFilePath,
-        position: params?.position,
-        label: label || 'Mark'
+      const result = await invoke('create_mark', {
+        req: {
+          path: currentFilePath,
+          start: params?.start ?? params?.position ?? 0,
+          end: params?.end ?? (params?.position ?? 0) + 1,
+          color: params?.color ?? 'yellow',
+          label: label || 'Mark',
+          note: null,
+        }
       });
 
       useUIStore.getState().addNotification({
@@ -63,7 +90,32 @@ export function registerMarksActions() {
     }
   });
 
-  // Delete mark at current position or by id
+  // Highlight selection - creates marks for all occurrences of selected text
+  actionRegistry.register('marks', 'highlight_selection', async () => {
+    try {
+      const { currentFilePath } = useUIStore.getState();
+      if (!currentFilePath) throw new Error('No file open');
+
+      // Use the global navigate function to get editor selection
+      // The editor exposes handleCreateMark via window for cross-component communication
+      const color = getNextColor()
+
+      // Dispatch a custom event that the Editor listens to
+      const event = new CustomEvent('sak-mark-highlight', { detail: { color } })
+      window.dispatchEvent(event)
+
+      useUIStore.getState().addNotification({
+        type: 'info',
+        message: `Highlighting selection with ${color}`,
+        duration: 2000
+      });
+    } catch (error) {
+      console.error('[Marks Actions] Highlight failed:', error);
+      throw error;
+    }
+  });
+
+  // Delete mark by id
   actionRegistry.register('marks', 'delete', async (params?: {
     markId?: string;
   }) => {
@@ -71,9 +123,11 @@ export function registerMarksActions() {
       const { currentFilePath } = useUIStore.getState();
       if (!currentFilePath) throw new Error('No file open');
 
-      const result = await invoke('marks_delete', {
-        file_path: currentFilePath,
-        mark_id: params?.markId
+      const result = await invoke('delete_mark', {
+        req: {
+          path: currentFilePath,
+          id: params?.markId
+        }
       });
 
       useUIStore.getState().addNotification({
@@ -95,8 +149,8 @@ export function registerMarksActions() {
       const { currentFilePath } = useUIStore.getState();
       if (!currentFilePath) throw new Error('No file open');
 
-      const result = await invoke('marks_clear', {
-        file_path: currentFilePath
+      const result = await invoke('clear_marks', {
+        path: currentFilePath
       });
 
       useUIStore.getState().addNotification({
@@ -124,8 +178,8 @@ export function registerMarksActions() {
       });
 
       if (path) {
-        const result = await invoke('marks_export', {
-          file_path: currentFilePath,
+        const result = await invoke('export_marks', {
+          path: currentFilePath,
           export_path: path
         });
 
@@ -155,8 +209,8 @@ export function registerMarksActions() {
       });
 
       if (selected && typeof selected === 'string') {
-        const result = await invoke('marks_import', {
-          file_path: currentFilePath,
+        const result = await invoke('import_marks', {
+          path: currentFilePath,
           import_path: selected
         });
 

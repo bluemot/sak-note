@@ -29,6 +29,16 @@ export function registerLlmModule() {
         when: 'hasFileOpen'
       },
       {
+        id: 'settings',
+        type: 'toolbar_button',
+        slot: 'toolbar.main',
+        module: 'llm',
+        title: 'AI Settings',
+        icon: '🤖',
+        action: 'llm:settings',
+        order: 202
+      },
+      {
         id: 'chat-panel',
         type: 'sidebar_panel',
         slot: 'sidebar.tabs',

@@ -77,6 +77,44 @@ impl ChunkManager {
     pub fn chunk_count(&self) -> usize { self.chunks.len() }
     pub fn file_path(&self) -> &str { &self.file_path }
 
+    /// Count lines in the file by counting newlines in the mmap
+    pub fn line_count(&self) -> usize {
+        if let Some(ref mmap) = self.mmap {
+            let count = 1 + mmap.iter().filter(|&&b| b == b'\n').count();
+            count
+        } else {
+            0
+        }
+    }
+
+    /// Get lines by line number range (0-based, inclusive start, exclusive end)
+    pub fn get_lines(&self, start_line: usize, end_line: usize) -> Option<String> {
+        if let Some(ref mmap) = self.mmap {
+            let mut line_starts: Vec<usize> = vec![0];
+            for (i, &byte) in mmap.iter().enumerate() {
+                if byte == b'\n' {
+                    line_starts.push(i + 1);
+                    if line_starts.len() > end_line + 1 {
+                        break;
+                    }
+                }
+            }
+            if line_starts.len() <= end_line + 1 {
+                line_starts.push(mmap.len());
+            }
+
+            let start = start_line.min(line_starts.len() - 1);
+            let end = end_line.min(line_starts.len() - 1);
+            let byte_start = line_starts[start];
+            let byte_end = line_starts[end + 1].min(mmap.len());
+            let length = byte_end.saturating_sub(byte_start);
+
+            Some(String::from_utf8_lossy(&mmap[byte_start..byte_start + length]).to_string())
+        } else {
+            None
+        }
+    }
+
     pub fn get_chunk(&self, chunk_id: usize) -> Option<Chunk> {
         log::debug!("[ChunkManager::get_chunk] Requesting chunk_id={}", chunk_id);
         if chunk_id >= self.chunks.len() { 
@@ -156,6 +194,90 @@ impl ChunkManager {
     }
 }
 
+/// Pre-built index of line start positions for O(1) line lookup
+pub struct LineIndex {
+    /// Byte offset of each line start. line_starts[0] = 0, line_starts[i] = byte offset of line i
+    line_starts: Vec<usize>,
+    /// Total file size in bytes
+    file_size: usize,
+}
+
+impl LineIndex {
+    /// Build a line index by scanning for newlines
+    pub fn build(data: &[u8]) -> Self {
+        let mut line_starts = Vec::with_capacity(data.len() / 80);
+        line_starts.push(0); // Line 0 starts at offset 0
+
+        for (i, &byte) in data.iter().enumerate() {
+            if byte == b'\n' {
+                line_starts.push(i + 1);
+            }
+        }
+
+        LineIndex {
+            line_starts,
+            file_size: data.len(),
+        }
+    }
+
+    /// Build from newline positions (for chunked scanning)
+    pub fn build_from_newline_offsets(offsets: Vec<usize>, file_size: usize) -> Self {
+        let mut line_starts = Vec::with_capacity(offsets.len() + 1);
+        line_starts.push(0);
+        for offset in offsets {
+            line_starts.push(offset + 1); // Line starts after the newline
+        }
+        LineIndex {
+            line_starts,
+            file_size,
+        }
+    }
+
+    /// Get total number of lines
+    pub fn line_count(&self) -> usize {
+        if self.file_size == 0 {
+            0
+        } else {
+            self.line_starts.len()
+        }
+    }
+
+    /// Get byte offset for the start of a line (0-based line number)
+    /// Returns None if line is out of bounds
+    pub fn line_offset(&self, line: usize) -> Option<usize> {
+        self.line_starts.get(line).copied()
+    }
+
+    /// Get byte offset for the end of a line (start of next line, or file end)
+    /// For the last line, returns file_size
+    pub fn line_end_offset(&self, line: usize) -> Option<usize> {
+        if line + 1 < self.line_starts.len() {
+            self.line_starts.get(line + 1).copied()
+        } else if line < self.line_starts.len() {
+            Some(self.file_size)
+        } else {
+            None
+        }
+    }
+
+    /// Get byte range for lines [start_line, end_line) (0-based, end exclusive)
+    /// Returns (byte_start, byte_end)
+    pub fn line_range(&self, start_line: usize, end_line: usize) -> Option<(usize, usize)> {
+        let byte_start = self.line_offset(start_line)?;
+        let byte_end = if end_line >= self.line_starts.len() {
+            self.file_size
+        } else {
+            self.line_starts.get(end_line).copied().unwrap_or(self.file_size)
+        };
+        Some((byte_start, byte_end))
+    }
+
+    /// Memory usage of the index in bytes
+    pub fn memory_usage(&self) -> usize {
+        self.line_starts.len() * std::mem::size_of::<usize>()
+    }
+}
+
 /// Edit operation types
 #[derive(Debug, Clone)]
 pub enum EditOp {
@@ -176,6 +298,8 @@ pub struct EditableFileManager {
     has_changes: bool,
     // Modified regions (for display)
     modified_regions: BTreeMap<usize, usize>, // offset -> length
+    // Pre-built line index for O(1) line lookups
+    line_index: Option<LineIndex>,
 }
 
 impl EditableFileManager {
@@ -200,6 +324,7 @@ impl EditableFileManager {
             history_position: 0,
             has_changes: false,
             modified_regions: BTreeMap::new(),
+            line_index: None,
         })
     }
 
@@ -240,6 +365,8 @@ impl EditableFileManager {
         self.edit_history.push(op.clone());
         self.history_position += 1;
         self.has_changes = true;
+        // Invalidate line index since file content changed
+        self.line_index = None;
 
         // Track modified region
         match &op {
@@ -363,6 +490,137 @@ impl EditableFileManager {
         log::debug!("[EditableFileManager::get_text] Converted {} bytes to {} chars", 
             bytes.len(), text.chars().count());
         text
+    }
+
+    /// Count the number of lines in the file (considering edits)
+    /// Build the line index from current file content for O(1) line lookups
+    pub fn build_line_index(&mut self) {
+        log::info!("[EditableFileManager::build_line_index] Building line index");
+        let effective_size = self.effective_size() as usize;
+        if effective_size == 0 {
+            self.line_index = None;
+            return;
+        }
+
+        let mut newline_offsets = Vec::new();
+        let mut offset = 0usize;
+        while offset < effective_size {
+            let chunk_size = SEARCH_BUFFER_SIZE.min(effective_size - offset);
+            let chunk = self.get_range(offset, chunk_size);
+            for (i, &byte) in chunk.iter().enumerate() {
+                if byte == b'\n' {
+                    newline_offsets.push(offset + i);
+                }
+            }
+            offset += chunk_size;
+        }
+
+        let index = LineIndex::build_from_newline_offsets(newline_offsets, effective_size);
+        log::info!("[EditableFileManager::build_line_index] Index built: {} lines, {} bytes memory",
+            index.line_count(), index.memory_usage());
+        self.line_index = Some(index);
+    }
+
+    /// Get lines using pre-built index (O(1) lookup instead of O(n) scan)
+    pub fn get_lines_indexed(&self, start_line: usize, end_line: usize) -> Option<String> {
+        if let Some(ref index) = self.line_index {
+            let (byte_start, byte_end) = index.line_range(start_line, end_line)?;
+            let length = byte_end.saturating_sub(byte_start);
+            if length == 0 || byte_start >= index.file_size {
+                return Some(String::new());
+            }
+            let text = self.get_text(byte_start, length);
+            Some(text)
+        } else {
+            None
+        }
+    }
+
+    /// Get total line count from pre-built index
+    pub fn line_count_indexed(&self) -> Option<usize> {
+        self.line_index.as_ref().map(|idx| idx.line_count())
+    }
+
+    /// Get byte offset for a specific line using pre-built index
+    pub fn line_offset_indexed(&self, line: usize) -> Option<usize> {
+        self.line_index.as_ref().and_then(|idx| idx.line_offset(line))
+    }
+
+    /// Invalidate the line index (call after edits)
+    pub fn invalidate_line_index(&mut self) {
+        self.line_index = None;
+    }
+
+    pub fn line_count(&self) -> usize {
+        // Try indexed path first (O(1))
+        if let Some(count) = self.line_count_indexed() {
+            return count;
+        }
+
+        log::debug!("[EditableFileManager::line_count] Counting lines (fallback scan)");
+        let effective_size = self.effective_size() as usize;
+        if effective_size == 0 {
+            return 0;
+        }
+        // Count newlines by scanning through chunks
+        let mut count = 1usize; // A file with no newlines has 1 line
+        let mut offset = 0usize;
+        while offset < effective_size {
+            let chunk_size = SEARCH_BUFFER_SIZE.min(effective_size - offset);
+            let chunk = self.get_range(offset, chunk_size);
+            count += chunk.iter().filter(|&&b| b == b'\n').count();
+            offset += chunk_size;
+        }
+        log::debug!("[EditableFileManager::line_count] File has {} lines", count);
+        count
+    }
+
+    /// Get lines by line number range (0-based, inclusive start, exclusive end)
+    /// Returns the text for those lines including their newline terminators
+    pub fn get_lines(&self, start_line: usize, end_line: usize) -> String {
+        // Try indexed path first (O(1))
+        if let Some(result) = self.get_lines_indexed(start_line, end_line) {
+            return result;
+        }
+
+        // Fallback: scan from beginning (original implementation)
+        log::debug!("[EditableFileManager::get_lines] start_line={}, end_line={} (fallback scan)", start_line, end_line);
+        let effective_size = self.effective_size() as usize;
+        if effective_size == 0 {
+            return String::new();
+        }
+
+        // Scan through file to find line boundaries
+        let mut line_starts: Vec<usize> = vec![0]; // Line 0 starts at offset 0
+        let mut offset = 0usize;
+        while offset < effective_size && line_starts.len() <= end_line + 1 {
+            let chunk_size = SEARCH_BUFFER_SIZE.min(effective_size - offset);
+            let chunk = self.get_range(offset, chunk_size);
+            for (i, &byte) in chunk.iter().enumerate() {
+                if byte == b'\n' {
+                    line_starts.push(offset + i + 1);
+                    if line_starts.len() > end_line + 1 {
+                        break;
+                    }
+                }
+            }
+            offset += chunk_size;
+        }
+        // Add end-of-file as final line start if needed
+        if line_starts.len() <= end_line + 1 {
+            line_starts.push(effective_size);
+        }
+
+        // Clamp range
+        let start = start_line.min(line_starts.len() - 1);
+        let end = end_line.min(line_starts.len() - 1);
+        let byte_start = line_starts[start];
+        let byte_end = line_starts[end + 1].min(effective_size);
+        let length = byte_end.saturating_sub(byte_start);
+
+        let result = self.get_text(byte_start, length);
+        log::debug!("[EditableFileManager::get_lines] Returning {} chars for lines {}-{}", result.len(), start_line, end_line);
+        result
     }
 
     /// Search for pattern in file (including uncommitted edits)
@@ -738,5 +996,230 @@ impl BatchEdit {
         for op in &self.operations {
             manager.apply_edit(op.clone());
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_line_index_basic() {
+        // "hello\nworld\nfoo\n" = 3 lines
+        let data = b"hello\nworld\nfoo\n";
+        let index = LineIndex::build(data);
+
+        assert_eq!(index.line_count(), 4); // 0: "hello\n", 1: "world\n", 2: "foo\n", 3: "" (empty trailing line)
+        assert_eq!(index.line_offset(0), Some(0));   // "hello\n" starts at 0
+        assert_eq!(index.line_offset(1), Some(6));   // "world\n" starts at 6
+        assert_eq!(index.line_offset(2), Some(12));  // "foo\n" starts at 12
+        assert_eq!(index.line_offset(3), Some(16));  // trailing empty line starts at 16
+        assert_eq!(index.line_offset(100), None);    // out of bounds
+    }
+
+    #[test]
+    fn test_line_index_empty_file() {
+        let data = b"";
+        let index = LineIndex::build(data);
+        assert_eq!(index.line_count(), 0);
+    }
+
+    #[test]
+    fn test_line_index_single_line_no_newline() {
+        let data = b"hello";
+        let index = LineIndex::build(data);
+        assert_eq!(index.line_count(), 1);
+        assert_eq!(index.line_offset(0), Some(0));
+        assert_eq!(index.line_end_offset(0), Some(5));
+    }
+
+    #[test]
+    fn test_line_index_single_line_with_newline() {
+        let data = b"hello\n";
+        let index = LineIndex::build(data);
+        assert_eq!(index.line_count(), 2); // "hello\n" + empty trailing line
+        assert_eq!(index.line_offset(0), Some(0));
+        assert_eq!(index.line_offset(1), Some(6));
+    }
+
+    #[test]
+    fn test_line_range() {
+        // "aaa\nbbb\nccc\n" = 4 lines (0-2 have content, 3 is empty)
+        let data = b"aaa\nbbb\nccc\n";
+        let index = LineIndex::build(data);
+
+        // Get byte range for lines 0-1 (should be "aaa\nbbb\n")
+        let (start, end) = index.line_range(0, 2).unwrap();
+        assert_eq!(start, 0);
+        assert_eq!(end, 8);
+
+        // Get byte range for lines 1-2 (should be "bbb\nccc\n")
+        let (start2, end2) = index.line_range(1, 3).unwrap();
+        assert_eq!(start2, 4);
+        assert_eq!(end2, 12);
+    }
+
+    #[test]
+    fn test_line_index_large_file() {
+        // Simulate a 1MB file with ~10000 lines
+        let line = b"This is a test line with some content\n";
+        let num_lines = 10000;
+        let mut data: Vec<u8> = Vec::with_capacity(line.len() * num_lines);
+        for _ in 0..num_lines {
+            data.extend_from_slice(line);
+        }
+
+        let start = std::time::Instant::now();
+        let index = LineIndex::build(&data);
+        let build_time = start.elapsed();
+
+        assert_eq!(index.line_count(), num_lines + 1); // +1 for trailing empty line
+
+        // Verify O(1) lookups
+        let start = std::time::Instant::now();
+        for i in 0..num_lines {
+            let offset = index.line_offset(i).unwrap();
+            assert_eq!(offset, i * line.len());
+        }
+        let lookup_time = start.elapsed();
+
+        // Verify line_range is fast
+        let start = std::time::Instant::now();
+        for _ in 0..1000 {
+            let _ = index.line_range(5000, 5100);
+        }
+        let range_time = start.elapsed();
+
+        println!("Line index build time for {} lines: {:?}", num_lines, build_time);
+        println!("10000 offset lookups: {:?}", lookup_time);
+        println!("1000 range lookups: {:?}", range_time);
+
+        // Build should be under 1 second for 10K lines
+        assert!(build_time.as_millis() < 1000);
+        // Lookups should be under 1ms total
+        assert!(lookup_time.as_micros() < 1000);
+    }
+
+    #[test]
+    fn test_line_index_from_newline_offsets() {
+        // Build from newline positions instead of raw data
+        let offsets = vec![5, 11, 20]; // newlines at positions 5, 11, 20
+        let index = LineIndex::build_from_newline_offsets(offsets, 25);
+
+        assert_eq!(index.line_count(), 4); // 3 newlines = 4 lines
+        assert_eq!(index.line_offset(0), Some(0));   // starts at 0
+        assert_eq!(index.line_offset(1), Some(6));    // after newline at 5
+        assert_eq!(index.line_offset(2), Some(12));   // after newline at 11
+        assert_eq!(index.line_offset(3), Some(21));   // after newline at 20
+    }
+
+    #[test]
+    fn test_line_index_memory_usage() {
+        let data = b"hello\nworld\nfoo\n";
+        let index = LineIndex::build(data);
+        // 4 line starts * size_of::<usize>()
+        assert_eq!(index.memory_usage(), 4 * std::mem::size_of::<usize>());
+    }
+
+    #[test]
+    fn test_line_index_end_offset() {
+        let data = b"aaa\nbbb\n";
+        let index = LineIndex::build(data);
+
+        assert_eq!(index.line_end_offset(0), Some(4));   // end of "aaa\n" = start of line 1
+        assert_eq!(index.line_end_offset(1), Some(8));   // end of "bbb\n" = file end
+        assert_eq!(index.line_end_offset(2), None);      // out of bounds
+    }
+
+    #[test]
+    fn test_editable_file_manager_line_index() {
+        use std::io::Write;
+
+        // Create a temp file with known content
+        let temp_dir = std::env::temp_dir();
+        let temp_path = temp_dir.join("sak_test_line_index.txt");
+        let mut file = std::fs::File::create(&temp_path).unwrap();
+        writeln!(file, "line zero").unwrap();
+        writeln!(file, "line one").unwrap();
+        writeln!(file, "line two").unwrap();
+        writeln!(file, "line three").unwrap();
+
+        // Create EditableFileManager and open the file
+        let mut manager = EditableFileManager::new(temp_path.to_str().unwrap()).unwrap();
+
+        // Build line index
+        manager.build_line_index();
+
+        // Verify line count
+        let count = manager.line_count();
+        assert_eq!(count, 5); // 4 content lines + 1 empty trailing line
+
+        // Verify get_lines uses index
+        let lines = manager.get_lines_indexed(0, 2);
+        assert!(lines.is_some());
+        let content = lines.unwrap();
+        assert!(content.contains("line zero"));
+        assert!(content.contains("line one"));
+
+        // Verify line_offset_indexed
+        let offset = manager.line_offset_indexed(0);
+        assert_eq!(offset, Some(0));
+
+        // Clean up
+        let _ = std::fs::remove_file(&temp_path);
+    }
+
+    #[test]
+    fn test_editable_file_manager_indexed_vs_scan() {
+        use std::io::Write;
+
+        // Create a temp file with many lines
+        let temp_dir = std::env::temp_dir();
+        let temp_path = temp_dir.join("sak_test_line_index_perf.txt");
+        let mut file = std::fs::File::create(&temp_path).unwrap();
+        for i in 0..5000 {
+            writeln!(file, "This is line number {}", i).unwrap();
+        }
+
+        // Test without index (fallback scan)
+        let manager_no_index = EditableFileManager::new(temp_path.to_str().unwrap()).unwrap();
+        // Don't build index - force fallback
+
+        let start = std::time::Instant::now();
+        let count_scan = manager_no_index.line_count();
+        let scan_time = start.elapsed();
+
+        // Test with index
+        let mut manager_indexed = EditableFileManager::new(temp_path.to_str().unwrap()).unwrap();
+        manager_indexed.build_line_index();
+
+        let start = std::time::Instant::now();
+        let count_indexed = manager_indexed.line_count();
+        let indexed_time = start.elapsed();
+
+        assert_eq!(count_scan, count_indexed);
+        println!("Line count (5000 lines): scan={:?}, indexed={:?}", scan_time, indexed_time);
+
+        // Test get_lines performance
+        let start = std::time::Instant::now();
+        for _ in 0..100 {
+            let _ = manager_no_index.get_lines(2500, 2510);
+        }
+        let get_lines_scan_time = start.elapsed();
+
+        let start = std::time::Instant::now();
+        for _ in 0..100 {
+            let _ = manager_indexed.get_lines(2500, 2510);
+        }
+        let get_lines_indexed_time = start.elapsed();
+
+        println!("get_lines x100 (2500-2510): scan={:?}, indexed={:?}", 
+                 get_lines_scan_time, get_lines_indexed_time);
+
+        // Indexed should be faster
+        assert!(get_lines_indexed_time <= get_lines_scan_time);
+
+        // Clean up
+        let _ = std::fs::remove_file(&temp_path);
     }
 }

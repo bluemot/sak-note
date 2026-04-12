@@ -1,5 +1,5 @@
 import React from 'react';
-import { UIComponentDefinition, uiRegistry } from '../ModuleUIRegistry';
+import { UIComponentDefinition, useSlotComponents } from '../ModuleUIRegistry';
 import { useCondition } from '../hooks/useCondition';
 import { actionRegistry } from '../actions/actionRegistry';
 import './DynamicToolbar.css';
@@ -66,8 +66,8 @@ const ToolbarButton: React.FC<ToolbarButtonProps> = ({ component }) => {
 };
 
 export const DynamicToolbar: React.FC = () => {
-  // 讀取 toolbar.main slot 的所有組件
-  const components = uiRegistry.getComponentsForSlot('toolbar.main');
+  // Reactively read toolbar.main slot components (re-renders on registry change)
+  const components = useSlotComponents('toolbar.main');
   
   if (components.length === 0) {
     return (

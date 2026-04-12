@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { invoke } from '@tauri-apps/api/core'
+import { useSettingsStore, AVAILABLE_MODELS } from '../store/settingsStore'
 import './LlmChat.css'
 
 interface Message {
@@ -22,17 +23,19 @@ export default function LlmChat({ filePath }: LlmChatProps) {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
-  const [model, setModel] = useState('kimi-k2.5:cloud')
   const [isConnected, setIsConnected] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+
+  const model = useSettingsStore((s) => s.aiSettings.model)
+  const apiUrl = useSettingsStore((s) => s.aiSettings.apiUrl)
   
   const contextId = filePath || 'default'
   
-  // Check connection on mount
+  // Check connection on mount or when apiUrl changes
   useEffect(() => {
     checkConnection()
-  }, [])
+  }, [apiUrl])
   
   // Scroll to bottom on new messages
   useEffect(() => {
@@ -44,7 +47,7 @@ export default function LlmChat({ filePath }: LlmChatProps) {
       await invoke<{ models: Array<{ name: string }> }>('execute_module', {
         module: 'llm',
         capability: 'list_models',
-        input: { api_url: 'https://ollama.com' }
+        input: { api_url: apiUrl }
       })
       setIsConnected(true)
       setError(null)
@@ -125,10 +128,10 @@ export default function LlmChat({ filePath }: LlmChatProps) {
       
       <div className="model-selector">
         <label>Model:</label>
-        <select value={model} onChange={(e) => setModel(e.target.value)}>
-          <option value="kimi-k2.5:cloud">kimi-k2.5:cloud</option>
-          <option value="llama3">llama3</option>
-          <option value="qwen2.5:14b">qwen2.5:14b</option>
+        <select value={model} onChange={(e) => useSettingsStore.getState().updateAISettings({ model: e.target.value })}>
+          {AVAILABLE_MODELS.map(m => (
+            <option key={m.value} value={m.value}>{m.label}</option>
+          ))}
         </select>
       </div>
       

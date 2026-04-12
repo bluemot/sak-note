@@ -16,6 +16,16 @@ export function registerSftpModule() {
         order: 100
       },
       {
+        id: 'site-manager',
+        type: 'toolbar_button',
+        slot: 'toolbar.main',
+        module: 'sftp',
+        title: 'SFTP Sites',
+        icon: '📂',
+        action: 'sftp:site_manager',
+        order: 101
+      },
+      {
         id: 'open-remote',
         type: 'menu_item',
         slot: 'menu.file',

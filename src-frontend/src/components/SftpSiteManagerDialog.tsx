@@ -17,6 +17,11 @@ interface SftpSiteManagerDialogProps {
   onConnect: (site: SftpSite) => void
 }
 
+// Check if running inside Tauri
+function isTauriAvailable(): boolean {
+  return !!(window as any).__TAURI_INTERNALS__
+}
+
 export function SftpSiteManagerDialog({ isOpen, onClose, onConnect }: SftpSiteManagerDialogProps) {
   const [sites, setSites] = useState<SftpSite[]>([])
   const [selectedSite, setSelectedSite] = useState<SftpSite | null>(null)
@@ -37,7 +42,7 @@ export function SftpSiteManagerDialog({ isOpen, onClose, onConnect }: SftpSiteMa
   const listRef = useRef<HTMLDivElement>(null)
   const [focusedIndex, setFocusedIndex] = useState(-1)
 
-  // Load sites from localStorage on mount
+  // Load sites on mount / when dialog opens
   useEffect(() => {
     if (isOpen) {
       loadSites()
@@ -74,7 +79,6 @@ export function SftpSiteManagerDialog({ isOpen, onClose, onConnect }: SftpSiteMa
         return
       }
 
-      // List navigation
       if (e.key === 'ArrowDown') {
         e.preventDefault()
         setFocusedIndex(prev => {
@@ -108,23 +112,44 @@ export function SftpSiteManagerDialog({ isOpen, onClose, onConnect }: SftpSiteMa
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [isOpen, sites, selectedSite, isAdding, isEditing])
 
-  const loadSites = () => {
+  const loadSites = async () => {
+    if (isTauriAvailable()) {
+      try {
+        const result = await invoke<{ sites: any[] }>('sftp_list_sites')
+        const mapped: SftpSite[] = (result.sites || []).map((s: any) => ({
+          id: s.id,
+          name: s.name,
+          host: s.hostname || s.host || '',
+          port: s.port || 22,
+          username: s.username || '',
+          password: undefined, // never expose passwords from backend
+        }))
+        setSites(mapped)
+      } catch (err) {
+        console.error('[SftpSiteManager] Failed to load sites from backend, falling back to localStorage:', err)
+        loadSitesFromLocalStorage()
+      }
+    } else {
+      loadSitesFromLocalStorage()
+    }
+  }
+
+  const loadSitesFromLocalStorage = () => {
     try {
       const stored = localStorage.getItem('sak-sftp-sites')
       if (stored) {
         setSites(JSON.parse(stored))
       }
     } catch (err) {
-      console.error('Failed to load sites:', err)
+      console.error('Failed to load sites from localStorage:', err)
     }
   }
 
-  const saveSites = (newSites: SftpSite[]) => {
+  const saveSitesToLocalStorage = (newSites: SftpSite[]) => {
     try {
       localStorage.setItem('sak-sftp-sites', JSON.stringify(newSites))
-      setSites(newSites)
     } catch (err) {
-      console.error('Failed to save sites:', err)
+      console.error('Failed to save sites to localStorage:', err)
     }
   }
 
@@ -153,7 +178,7 @@ export function SftpSiteManagerDialog({ isOpen, onClose, onConnect }: SftpSiteMa
     setFormData({ name: '', host: '', port: 22, username: '', password: '' })
   }
 
-  const handleSaveSite = () => {
+  const handleSaveSite = async () => {
     if (!formData.name || !formData.host || !formData.username) {
       return
     }
@@ -167,30 +192,102 @@ export function SftpSiteManagerDialog({ isOpen, onClose, onConnect }: SftpSiteMa
         username: formData.username!,
         password: formData.password,
       }
-      saveSites([...sites, newSite])
-    } else if (isEditing && selectedSite) {
-      const updatedSites = sites.map(site =>
-        site.id === selectedSite.id
-          ? {
-              ...site,
-              name: formData.name!,
-              host: formData.host!,
-              port: formData.port || 22,
-              username: formData.username!,
-              ...(formData.password ? { password: formData.password } : {}),
+
+      if (isTauriAvailable()) {
+        try {
+          await invoke('sftp_add_site', {
+            request: {
+              site: {
+                id: newSite.id,
+                name: newSite.name,
+                hostname: newSite.host,
+                port: newSite.port,
+                username: newSite.username,
+                default_path: '',
+                group: '',
+                notes: '',
+              },
+              password: newSite.password || null,
+              ssh_key_path: null,
             }
-          : site
-      )
-      saveSites(updatedSites)
+          })
+          // Reload from backend to get the canonical site data
+          await loadSites()
+        } catch (err) {
+          console.error('[SftpSiteManager] Failed to add site via backend:', err)
+          // Fallback: save locally
+          const updated = [...sites, newSite]
+          setSites(updated)
+          saveSitesToLocalStorage(updated)
+        }
+      } else {
+        const updated = [...sites, newSite]
+        setSites(updated)
+        saveSitesToLocalStorage(updated)
+      }
+    } else if (isEditing && selectedSite) {
+      const updatedSite: SftpSite = {
+        ...selectedSite,
+        name: formData.name!,
+        host: formData.host!,
+        port: formData.port || 22,
+        username: formData.username!,
+        ...(formData.password ? { password: formData.password } : {}),
+      }
+
+      if (isTauriAvailable()) {
+        try {
+          await invoke('sftp_update_site', {
+            site: {
+              id: updatedSite.id,
+              name: updatedSite.name,
+              hostname: updatedSite.host,
+              port: updatedSite.port,
+              username: updatedSite.username,
+              default_path: '',
+              group: '',
+              notes: '',
+            },
+            password: formData.password || null,
+          })
+          await loadSites()
+        } catch (err) {
+          console.error('[SftpSiteManager] Failed to update site via backend:', err)
+          // Fallback: update locally
+          const updated = sites.map(s => s.id === selectedSite.id ? updatedSite : s)
+          setSites(updated)
+          saveSitesToLocalStorage(updated)
+        }
+      } else {
+        const updated = sites.map(s => s.id === selectedSite.id ? updatedSite : s)
+        setSites(updated)
+        saveSitesToLocalStorage(updated)
+      }
     }
 
     handleCancelEdit()
   }
 
-  const handleDeleteSite = (siteId: string) => {
+  const handleDeleteSite = async (siteId: string) => {
     if (!confirm('Are you sure you want to delete this site?')) return
-    const updatedSites = sites.filter(s => s.id !== siteId)
-    saveSites(updatedSites)
+
+    if (isTauriAvailable()) {
+      try {
+        await invoke('sftp_remove_site', { siteId })
+        await loadSites()
+      } catch (err) {
+        console.error('[SftpSiteManager] Failed to delete site via backend:', err)
+        // Fallback: delete locally
+        const updated = sites.filter(s => s.id !== siteId)
+        setSites(updated)
+        saveSitesToLocalStorage(updated)
+      }
+    } else {
+      const updated = sites.filter(s => s.id !== siteId)
+      setSites(updated)
+      saveSitesToLocalStorage(updated)
+    }
+
     if (selectedSite?.id === siteId) {
       setSelectedSite(null)
       setFocusedIndex(-1)
@@ -201,12 +298,17 @@ export function SftpSiteManagerDialog({ isOpen, onClose, onConnect }: SftpSiteMa
     setConnectionStatus(prev => ({ ...prev, [site.id]: 'connecting' }))
     
     try {
-      await invoke('sftp_connect', {
-        host: site.host,
-        port: site.port,
-        username: site.username,
-        password: site.password,
-      })
+      if (isTauriAvailable()) {
+        await invoke('sftp_connect_site', { siteId: site.id })
+      } else {
+        // Fallback: use legacy sftp_connect for browser dev mode
+        await invoke('sftp_connect', {
+          host: site.host,
+          port: site.port,
+          username: site.username,
+          password: site.password,
+        })
+      }
       
       setConnectionStatus(prev => ({ ...prev, [site.id]: 'connected' }))
       onConnect(site)

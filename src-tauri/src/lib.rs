@@ -64,6 +64,13 @@ struct GetTextRequest {
 }
 
 #[derive(Debug, Deserialize)]
+struct GetLinesRequest {
+    path: String,
+    start_line: usize,
+    end_line: usize,
+}
+
+#[derive(Debug, Deserialize)]
 struct GetHexRequest {
     path: String,
     start: usize,
@@ -287,6 +294,89 @@ async fn get_text(req: GetTextRequest) -> Result<String, String> {
             Err("File not open".to_string())
         }
     }
+}
+
+/// Get lines by line number range (0-based, start inclusive, end exclusive)
+#[tauri::command]
+async fn get_lines(req: GetLinesRequest) -> Result<String, String> {
+    let start_time = std::time::Instant::now();
+    log::info!("[lib::get_lines] Request: path={}, start_line={}, end_line={}", req.path, req.start_line, req.end_line);
+
+    // Try editable first
+    match FileEngine::get_editable(&req.path) {
+        Some(manager) => {
+            let guard = manager.read().map_err(|e| format!("Lock error: {}", e))?;
+            let text = guard.get_lines(req.start_line, req.end_line);
+            let elapsed = start_time.elapsed();
+            log::info!("[lib::get_lines] Got {} chars in {:?}", text.len(), elapsed);
+            Ok(text)
+        }
+        None => {
+            // Try read-only cache
+            match FileEngine::get_file(&req.path) {
+                Some(chunk_mgr) => {
+                    match chunk_mgr.get_lines(req.start_line, req.end_line) {
+                        Some(text) => {
+                            let elapsed = start_time.elapsed();
+                            log::info!("[lib::get_lines] Got {} chars in {:?}", text.len(), elapsed);
+                            Ok(text)
+                        }
+                        None => Err("Failed to get lines from file".to_string()),
+                    }
+                }
+                None => Err("File not open".to_string()),
+            }
+        }
+    }
+}
+
+/// Get the number of lines in a file
+#[tauri::command]
+async fn line_count(path: String) -> Result<usize, String> {
+    log::info!("[lib::line_count] Request: path={}", path);
+
+    // Try editable first
+    match FileEngine::get_editable(&path) {
+        Some(manager) => {
+            let guard = manager.read().map_err(|e| format!("Lock error: {}", e))?;
+            Ok(guard.line_count())
+        }
+        None => {
+            // Try read-only cache
+            match FileEngine::get_file(&path) {
+                Some(chunk_mgr) => Ok(chunk_mgr.line_count()),
+                None => Err("File not open".to_string()),
+            }
+        }
+    }
+}
+
+/// Build line index for O(1) line lookups
+#[tauri::command]
+async fn build_line_index(path: String) -> Result<FileInfo, String> {
+    log::info!("[lib::build_line_index] Building line index for: {}", path);
+
+    let manager = FileEngine::get_editable(&path)
+        .ok_or_else(|| "File not open".to_string())?;
+    {
+        let mut guard = manager.write().map_err(|e| e.to_string())?;
+        guard.build_line_index();
+    }
+
+    // Return updated file info with line count from index
+    FileEngine::get_file_info(&path)
+        .ok_or_else(|| "Failed to get file info after building index".to_string())
+}
+
+/// Get byte offset for a specific line using pre-built index
+#[tauri::command]
+async fn get_line_offset(path: String, line: usize) -> Result<usize, String> {
+    let manager = FileEngine::get_editable(&path)
+        .ok_or_else(|| "File not open".to_string())?;
+    let guard = manager.read().map_err(|e| e.to_string())?;
+
+    guard.line_offset_indexed(line)
+        .ok_or_else(|| "Line index not available or line out of bounds".to_string())
 }
 
 /// Get chunk command - retrieves a specific chunk from file
@@ -701,9 +791,14 @@ pub fn run() {
             open_file,
             get_chunk,
             get_text,
+            get_lines,
+            line_count,
             get_hex_view,
             close_file,
             get_file_info,
+            // Line index commands
+            build_line_index,
+            get_line_offset,
             // Edit operations
             insert_bytes,
             delete_bytes,
