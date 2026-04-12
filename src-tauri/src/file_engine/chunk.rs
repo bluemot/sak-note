@@ -494,14 +494,27 @@ impl EditableFileManager {
 
     /// Count the number of lines in the file (considering edits)
     /// Build the line index from current file content for O(1) line lookups
-    pub fn build_line_index(&mut self) {
-        log::info!("[EditableFileManager::build_line_index] Building line index");
+    /// Scan the file for newline positions (read-only, can run under read lock)
+    /// Returns the built LineIndex but does NOT store it
+    pub fn scan_line_index(&self) -> Option<LineIndex> {
         let effective_size = self.effective_size() as usize;
         if effective_size == 0 {
-            self.line_index = None;
-            return;
+            return None;
         }
 
+        // Fast path: read directly from mmap when no edits
+        if self.history_position == 0 {
+            if let Some(ref mmap) = self.mmap {
+                let start = std::time::Instant::now();
+                let index = LineIndex::build(&mmap[..effective_size]);
+                log::info!("[EditableFileManager::scan_line_index] Index built from mmap in {:?}: {} lines",
+                    start.elapsed(), index.line_count());
+                return Some(index);
+            }
+        }
+
+        // Fallback: use get_range for files with edits
+        log::info!("[EditableFileManager::scan_line_index] Using get_range fallback (has {} edits)", self.history_position);
         let mut newline_offsets = Vec::new();
         let mut offset = 0usize;
         while offset < effective_size {
@@ -516,9 +529,21 @@ impl EditableFileManager {
         }
 
         let index = LineIndex::build_from_newline_offsets(newline_offsets, effective_size);
-        log::info!("[EditableFileManager::build_line_index] Index built: {} lines, {} bytes memory",
+        log::info!("[EditableFileManager::scan_line_index] Index built: {} lines", index.line_count());
+        Some(index)
+    }
+
+    /// Store a pre-built line index (write operation, needs write lock)
+    pub fn set_line_index(&mut self, index: LineIndex) {
+        log::info!("[EditableFileManager::set_line_index] Storing index: {} lines, {} bytes",
             index.line_count(), index.memory_usage());
         self.line_index = Some(index);
+    }
+
+    pub fn build_line_index(&mut self) {
+        if let Some(index) = self.scan_line_index() {
+            self.line_index = Some(index);
+        }
     }
 
     /// Get lines using pre-built index (O(1) lookup instead of O(n) scan)

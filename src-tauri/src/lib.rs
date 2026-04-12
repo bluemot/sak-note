@@ -358,10 +358,21 @@ async fn build_line_index(path: String) -> Result<FileInfo, String> {
 
     let manager = FileEngine::get_editable(&path)
         .ok_or_else(|| "File not open".to_string())?;
+
+    // Step 1: Scan under READ lock (does not block other commands)
+    let index = {
+        let guard = manager.read().map_err(|e| e.to_string())?;
+        guard.scan_line_index()
+            .ok_or_else(|| "Failed to scan line index".to_string())?
+    };
+
+    // Step 2: Store under WRITE lock (very fast, just setting a field)
     {
         let mut guard = manager.write().map_err(|e| e.to_string())?;
-        guard.build_line_index();
+        guard.set_line_index(index);
     }
+
+    log::info!("[lib::build_line_index] Line index built and stored");
 
     // Return updated file info with line count from index
     FileEngine::get_file_info(&path)
