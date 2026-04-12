@@ -396,7 +396,19 @@ impl EditableFileManager {
     /// Get range of bytes (considering edits)
     pub fn get_range(&self, start: usize, length: usize) -> Vec<u8> {
         log::debug!("[EditableFileManager::get_range] start={}, length={}", start, length);
-        // Apply edits to get the logical view
+
+        // Fast path: no edits applied, read directly from mmap
+        if self.history_position == 0 {
+            if let Some(ref mmap) = self.mmap {
+                let end = (start + length).min(mmap.len());
+                if start >= mmap.len() {
+                    return Vec::new();
+                }
+                return mmap[start..end].to_vec();
+            }
+        }
+
+        // Slow path: apply edits to get the logical view
         let mut result = Vec::with_capacity(length);
         let end = start + length;
 
@@ -485,11 +497,20 @@ impl EditableFileManager {
     /// Get text range (considering edits)
     pub fn get_text(&self, start: usize, length: usize) -> String {
         log::debug!("[EditableFileManager::get_text] start={}, length={}", start, length);
+
+        // Fast path: no edits, read directly from mmap
+        if self.history_position == 0 {
+            if let Some(ref mmap) = self.mmap {
+                let end = (start + length).min(mmap.len());
+                if start >= mmap.len() {
+                    return String::new();
+                }
+                return String::from_utf8_lossy(&mmap[start..end]).to_string();
+            }
+        }
+
         let bytes = self.get_range(start, length);
-        let text = String::from_utf8_lossy(&bytes).to_string();
-        log::debug!("[EditableFileManager::get_text] Converted {} bytes to {} chars", 
-            bytes.len(), text.chars().count());
-        text
+        String::from_utf8_lossy(&bytes).to_string()
     }
 
     /// Count the number of lines in the file (considering edits)
